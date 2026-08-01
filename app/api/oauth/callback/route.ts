@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   if (error || !code) {
     return NextResponse.redirect(
-      `${process.env.APP_URL}/dashboard?error=${encodeURIComponent(error || "sem_code")}`
+      `${process.env.APP_URL}/dashboard.html?error=${encodeURIComponent(error || "sem_code")}`
     );
   }
 
@@ -41,10 +41,10 @@ export async function GET(req: NextRequest) {
     // Assina os webhooks de comments/messages para essa conta
     await subscribeApp(profile.user_id, long.access_token);
 
-    return NextResponse.redirect(`${process.env.APP_URL}/dashboard?connected=1`);
+    return NextResponse.redirect(`${process.env.APP_URL}/dashboard.html?connected=1`);
   } catch (e: any) {
     return NextResponse.redirect(
-      `${process.env.APP_URL}/dashboard?error=${encodeURIComponent(e.message)}`
+      `${process.env.APP_URL}/dashboard.html?error=${encodeURIComponent(e.message)}`
     );
   }
 }
