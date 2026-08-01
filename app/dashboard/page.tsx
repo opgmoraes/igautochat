@@ -1,19 +1,19 @@
 import Link from "next/link";
 import { getConfig, getAutomations, toggleAutomation, deleteAutomation } from "./actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function Dashboard() {
   const config = await getConfig();
   const automations = await getAutomations();
   const connected = !!config?.access_token;
-
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
       <h1 style={{ fontSize: 24, fontWeight: 700 }}>Painel — Meu ManyChat</h1>
-
       {!connected ? (
         <div style={{ marginTop: 16, padding: 16, background: "#fff3e0", borderRadius: 8 }}>
           <p>Seu Instagram ainda não está conectado.</p>
-          <a
+          
             href="/api/oauth/start"
             style={{
               display: "inline-block",
@@ -33,7 +33,6 @@ export default async function Dashboard() {
           Conectado como <b>@{config.ig_username}</b>
         </div>
       )}
-
       <div style={{ marginTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ fontSize: 18, fontWeight: 600 }}>Automações</h2>
         <Link
@@ -43,7 +42,6 @@ export default async function Dashboard() {
           + Nova automação
         </Link>
       </div>
-
       <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         {automations.length === 0 && <p style={{ color: "#666" }}>Nenhuma automação criada ainda.</p>}
         {automations.map((a: any) => (
