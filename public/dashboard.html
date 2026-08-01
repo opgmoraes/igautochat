@@ -3,36 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Meu ManyChat — Painel</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 0 auto; padding: 24px; color: #222; background: #fafafa; }
-  h1 { font-size: 24px; margin-bottom: 16px; }
-  h2 { font-size: 18px; margin: 0; }
-  .box { padding: 16px; border-radius: 8px; margin-bottom: 16px; }
-  .box.warn { background: #fff3e0; }
-  .box.ok { background: #e8f5e9; }
-  .btn { display: inline-block; padding: 10px 16px; background: #111; color: #fff; border-radius: 8px; text-decoration: none; border: none; cursor: pointer; font-size: 14px; }
-  .btn.primary { background: #ff5a1f; }
-  .btn.small { padding: 6px 12px; font-size: 13px; margin-right: 8px; margin-top: 8px; }
-  .btn.danger { background: #fff; color: #d33; border: 1px solid #d33; }
-  .row { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; }
-  .card { padding: 16px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 12px; background: #fff; }
-  .card .top { display: flex; justify-content: space-between; }
-  .meta { font-size: 13px; color: #666; margin-top: 4px; }
-  .active { color: green; font-weight: 600; }
-  .paused { color: #999; }
-  .empty { color: #666; }
-  a.link { color: #ff5a1f; }
-</style>
+<title>Central de Sinal — Meu ManyChat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <h1>Painel — Meu ManyChat</h1>
+  <div class="eyebrow"><span id="clock-dot" class="dot off"></span> painel · instagram</div>
+  <h1>Central de Sinal</h1>
 
   <div id="connection-box"></div>
 
   <div class="row">
-    <h2>Automações</h2>
+    <h2>Automações<span class="count" id="auto-count"></span></h2>
     <a href="/new-automation.html" class="btn primary">+ Nova automação</a>
   </div>
 
@@ -43,14 +26,33 @@ async function loadConfig() {
   const res = await fetch('/api/config');
   const { config } = await res.json();
   const box = document.getElementById('connection-box');
+  const clockDot = document.getElementById('clock-dot');
+
   if (!config || !config.access_token) {
+    clockDot.className = 'dot off';
     box.innerHTML = `
-      <div class="box warn">
-        <p>Seu Instagram ainda não está conectado.</p>
-        <a href="/api/oauth/start" class="btn">Conectar Instagram</a>
+      <div class="status-strip">
+        <div class="left">
+          <span class="dot off"></span>
+          <div>
+            <div class="label">Instagram <b>desconectado</b></div>
+            <div class="sub">Conecte sua conta pra começar a escutar comentários e DMs</div>
+          </div>
+        </div>
+        <a href="/api/oauth/start" class="btn primary">Conectar</a>
       </div>`;
   } else {
-    box.innerHTML = `<div class="box ok">Conectado como <b>@${config.ig_username}</b></div>`;
+    clockDot.className = 'dot live';
+    box.innerHTML = `
+      <div class="status-strip">
+        <div class="left">
+          <span class="dot live"></span>
+          <div>
+            <div class="label">Conectado como <b>@${config.ig_username}</b></div>
+            <div class="sub">Escutando comentários, stories e DMs em tempo real</div>
+          </div>
+        </div>
+      </div>`;
   }
 }
 
@@ -64,7 +66,7 @@ async function toggleAutomation(id, active) {
 }
 
 async function deleteAutomation(id) {
-  if (!confirm('Excluir esta automação?')) return;
+  if (!confirm('Excluir esta automação? Essa ação não pode ser desfeita.')) return;
   await fetch('/api/automations/' + id, { method: 'DELETE' });
   loadAutomations();
 }
@@ -73,9 +75,17 @@ async function loadAutomations() {
   const res = await fetch('/api/automations');
   const { automations } = await res.json();
   const list = document.getElementById('automations-list');
+  const count = document.getElementById('auto-count');
+
+  count.textContent = automations && automations.length ? `${automations.length} no total` : '';
 
   if (!automations || automations.length === 0) {
-    list.innerHTML = '<p class="empty">Nenhuma automação criada ainda.</p>';
+    list.innerHTML = `
+      <div class="empty">
+        <span class="big">&#8942;</span>
+        Nenhum sinal configurado ainda.<br/>
+        Crie a primeira automação pra começar a converter comentários em DM.
+      </div>`;
     return;
   }
 
@@ -83,20 +93,28 @@ async function loadAutomations() {
     const gatilhos = [
       a.trigger_comment && 'comentário',
       a.trigger_story_reply && 'story',
-      a.trigger_dm && 'DM'
-    ].filter(Boolean).join(', ');
+      a.trigger_dm && 'dm'
+    ].filter(Boolean).join(' · ') || 'nenhum gatilho';
+
+    const keywords = (a.keywords || []).length
+      ? a.keywords.map(k => `<span class="chip">${escapeHtml(k)}</span>`).join('')
+      : `<span class="chip">qualquer palavra</span>`;
 
     return `
-      <div class="card">
-        <div class="top">
-          <b>${escapeHtml(a.name)}</b>
-          <span class="${a.active ? 'active' : 'paused'}">${a.active ? 'Ativa' : 'Pausada'}</span>
+      <div class="signal-row">
+        <span class="dot ${a.active ? 'live' : 'paused'}"></span>
+        <div class="content">
+          <div class="top-line">
+            <span class="name">${escapeHtml(a.name)}</span>
+            <span class="state ${a.active ? 'live' : 'paused'}">${a.active ? 'no ar' : 'pausada'}</span>
+          </div>
+          <div class="meta">Gatilhos: ${gatilhos}</div>
+          <div class="chips">${keywords}</div>
+          <div class="actions">
+            <button class="btn small" onclick="toggleAutomation('${a.id}', ${!a.active})">${a.active ? 'Pausar' : 'Ativar'}</button>
+            <button class="btn small danger" onclick="deleteAutomation('${a.id}')">Excluir</button>
+          </div>
         </div>
-        <div class="meta">
-          Palavras: ${a.keywords.join(', ') || '(qualquer)'} · Gatilhos: ${gatilhos}
-        </div>
-        <button class="btn small" onclick="toggleAutomation('${a.id}', ${!a.active})">${a.active ? 'Pausar' : 'Ativar'}</button>
-        <button class="btn small danger" onclick="deleteAutomation('${a.id}')">Excluir</button>
       </div>`;
   }).join('');
 }

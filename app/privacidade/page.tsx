@@ -1,7 +1,12 @@
 export default function Privacidade() {
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto", padding: 32, fontFamily: "system-ui", lineHeight: 1.6 }}>
-      <h1>Política de Privacidade</h1>
+    <div style={{
+      maxWidth: 680, margin: "0 auto", padding: "40px 24px 80px",
+      fontFamily: "Inter, system-ui, sans-serif", lineHeight: 1.7,
+      background: "#0b0d10", color: "#edeef0", minHeight: "100vh"
+    }}>
+      <style>{`a { color: #5eead4; }`}</style>
+      <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 26 }}>Política de Privacidade</h1>
       <p>
         Este aplicativo é uma ferramenta pessoal de automação de mensagens diretas (DM) do
         Instagram, usada exclusivamente pelo administrador desta conta para responder
