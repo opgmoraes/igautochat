@@ -1,6 +1,8 @@
 import { createAutomation, getMyMedia } from "../../actions";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default async function NewAutomation() {
   const media = await getMyMedia();
 
