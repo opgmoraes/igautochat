@@ -1,0 +1,121 @@
+-- =========================================================
+-- SCHEMA: IG AutoManyChat
+-- Rode isso inteiro no SQL Editor do Supabase (um clique)
+-- =========================================================
+
+create extension if not exists pgcrypto;
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- ---------- config (1 linha só) ----------
+create table if not exists config (
+  id int primary key default 1,
+  ig_user_id text,
+  ig_username text,
+  profile_picture_url text,
+  access_token text,
+  token_expires_at timestamptz,
+  connected_at timestamptz,
+  constraint single_row check (id = 1)
+);
+
+-- ---------- automations ----------
+create table if not exists automations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  active boolean not null default true,
+  trigger_comment boolean not null default true,
+  trigger_story_reply boolean not null default false,
+  trigger_dm boolean not null default false,
+  keywords text[] not null default '{}',
+  match_type text not null default 'contains' check (match_type in ('contains','exact','any')),
+  target_media_id text,               -- post/reels específico (opcional)
+  target_media_thumb text,
+  public_replies text[] not null default '{}',  -- variações de resposta pública
+  welcome_message text not null default '',
+  quick_reply_label text not null default 'Quero!',
+  link_label text not null default 'Acessar',
+  link_url text not null default '',
+  reminder_text text,
+  reminder_delay_minutes int default 60,
+  created_at timestamptz not null default now()
+);
+
+-- ---------- followups (derivados de uma automação) ----------
+create table if not exists followups (
+  id uuid primary key default gen_random_uuid(),
+  automation_id uuid references automations(id) on delete cascade,
+  step int not null,               -- 1 = link, 2 = lembrete, etc.
+  kind text not null check (kind in ('link','reminder')),
+  delay_minutes int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+-- ---------- contacts ----------
+create table if not exists contacts (
+  id uuid primary key default gen_random_uuid(),
+  ig_scoped_id text not null unique,   -- id da pessoa no Instagram
+  username text,
+  first_contact_at timestamptz not null default now(),
+  last_reply_at timestamptz,           -- abre a janela de 24h
+  last_automation_id uuid references automations(id),
+  created_at timestamptz not null default now()
+);
+
+-- ---------- queue (fila de envio, com trava atômica) ----------
+create table if not exists queue (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid references contacts(id) on delete cascade,
+  automation_id uuid references automations(id) on delete set null,
+  kind text not null check (kind in ('private_reply','dm','public_reply','link','reminder')),
+  payload jsonb not null default '{}',      -- corpo pronto pra API do IG
+  recipient_type text not null check (recipient_type in ('comment_id','id')),
+  recipient_value text not null,
+  needs_24h_window boolean not null default false,
+  send_after timestamptz not null default now(),  -- respeita atraso do followup
+  status text not null default 'pending' check (status in ('pending','sending','sent','failed','skipped')),
+  attempts int not null default 0,
+  claimed_at timestamptz,
+  error text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_queue_status on queue(status, send_after);
+
+-- ---------- events (log bruto de tudo que chega) ----------
+create table if not exists events (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,          -- comment | message | story_reply
+  raw jsonb not null,
+  processed boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- ---------- RLS ligado, sem policies (só o servidor com service key acessa) ----------
+alter table config enable row level security;
+alter table automations enable row level security;
+alter table followups enable row level security;
+alter table contacts enable row level security;
+alter table queue enable row level security;
+alter table events enable row level security;
+
+-- ---------- linha inicial de config ----------
+insert into config (id) values (1) on conflict (id) do nothing;
+
+-- =========================================================
+-- CRON JOBS (rodam sozinhos, de graça, dentro do Supabase)
+-- Troque SEU_APP_URL e SEU_CRON_SECRET depois de fazer o deploy
+-- (existe um passo separado pra isso, não precisa mexer agora)
+-- =========================================================
+-- select cron.schedule('drain-queue', '* * * * *', $$
+--   select net.http_post(
+--     url := 'https://SEU_APP_URL/api/cron/drain',
+--     headers := jsonb_build_object('x-cron-secret', 'SEU_CRON_SECRET')
+--   );
+-- $$);
+--
+-- select cron.schedule('refresh-token', '0 3 * * 1', $$
+--   select net.http_post(
+--     url := 'https://SEU_APP_URL/api/cron/refresh-token',
+--     headers := jsonb_build_object('x-cron-secret', 'SEU_CRON_SECRET')
+--   );
+-- $$);
