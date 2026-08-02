@@ -119,3 +119,13 @@ insert into config (id) values (1) on conflict (id) do nothing;
 --     headers := jsonb_build_object('x-cron-secret', 'SEU_CRON_SECRET')
 --   );
 -- $$);
+
+-- =========================================================
+-- MIGRAÇÃO: corrige exclusão de automação travada
+-- Rode isso no SQL Editor do Supabase (uma vez só)
+-- =========================================================
+-- Permite excluir uma automação mesmo que algum contato já tenha
+-- interagido com ela (o contato só perde a referência, não é apagado)
+alter table contacts drop constraint if exists contacts_last_automation_id_fkey;
+alter table contacts add constraint contacts_last_automation_id_fkey
+  foreign key (last_automation_id) references automations(id) on delete set null;

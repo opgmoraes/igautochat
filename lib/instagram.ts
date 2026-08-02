@@ -85,7 +85,8 @@ export async function subscribeApp(igUserId: string, token: string) {
 
 type SendPayload =
   | { text: string }
-  | { attachment: { type: "template"; payload: any } };
+  | { attachment: { type: "template"; payload: any } }
+  | { text: string; quick_replies: any[] };
 
 export async function sendMessage(opts: {
   igUserId: string;
@@ -126,8 +127,9 @@ export async function publicReply(commentId: string, token: string, message: str
   return json;
 }
 
-// Monta o corpo da DM: texto simples, ou botão com link, ou quick reply
-export function buildWelcomeMessage(auto: {
+// Mensagem 2: enviada só DEPOIS que a pessoa toca no botão de resposta rápida.
+// Essa sim contém o link de verdade.
+export function buildLinkMessage(auto: {
   welcome_message: string;
   link_label: string;
   link_url: string;
@@ -148,6 +150,26 @@ export function buildWelcomeMessage(auto: {
     };
   }
   return { text: auto.welcome_message };
+}
+
+// Mensagem 1: enviada assim que o comentário/DM bate a palavra-chave.
+// É só um convite com botão de RESPOSTA RÁPIDA (gera evento de volta pro webhook).
+// NÃO contém o link ainda — isso evita o bug de o botão "vazar" o link direto
+// e nunca abrir a janela de 24h pro lembrete funcionar.
+export function buildQuickReplyMessage(auto: {
+  welcome_message: string;
+  quick_reply_label: string;
+}): SendPayload {
+  return {
+    text: auto.welcome_message || "Oi!",
+    quick_replies: [
+      {
+        content_type: "text",
+        title: (auto.quick_reply_label || "Quero!").slice(0, 20),
+        payload: "SEND_LINK",
+      },
+    ],
+  };
 }
 
 export function matches(keywords: string[], matchType: string, text: string) {

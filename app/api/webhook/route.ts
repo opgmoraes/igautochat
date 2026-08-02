@@ -144,44 +144,54 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
     .select()
     .single();
 
-  // Se a pessoa respondeu/tocou no botão -> abre a janela de 24h e enfileira followups
-  if (isQuickReplyClick || (contact.last_automation_id && text)) {
+  // Se a pessoa tocou no botão de resposta rápida -> abre a janela de 24h e enfileira followups
+  // (Importante: só dispara no clique real do botão, nunca em texto solto, senão reenvia toda hora)
+  if (isQuickReplyClick && contact.last_automation_id) {
+    // Evita reenviar se esse contato+automação já teve followups enfileirados antes
+    const { data: already } = await db
+      .from("queue")
+      .select("id")
+      .eq("contact_id", contact.id)
+      .eq("automation_id", contact.last_automation_id)
+      .in("kind", ["link", "reminder"])
+      .limit(1);
+
+    if (already && already.length > 0) return; // já processado, não duplica
+
     await db
       .from("contacts")
       .update({ last_reply_at: new Date().toISOString() })
       .eq("id", contact.id);
 
-    if (contact.last_automation_id) {
-      const { data: followups } = await db
-        .from("followups")
-        .select("*")
-        .eq("automation_id", contact.last_automation_id)
-        .order("step");
+    const { data: followups } = await db
+      .from("followups")
+      .select("*")
+      .eq("automation_id", contact.last_automation_id)
+      .order("step");
 
-      const { data: auto } = await db
-        .from("automations")
-        .select("*")
-        .eq("id", contact.last_automation_id)
-        .single();
+    const { data: auto } = await db
+      .from("automations")
+      .select("*")
+      .eq("id", contact.last_automation_id)
+      .single();
 
-      for (const f of followups || []) {
-        await db.from("queue").insert({
-          contact_id: contact.id,
-          automation_id: contact.last_automation_id,
-          kind: f.kind === "reminder" ? "reminder" : "link",
-          recipient_type: "id",
-          recipient_value: senderId,
-          needs_24h_window: true,
-          send_after: new Date(Date.now() + f.delay_minutes * 60000).toISOString(),
-          payload: {
-            welcome_message:
-              f.kind === "reminder" ? auto?.reminder_text : auto?.welcome_message,
-            link_label: auto?.link_label,
-            link_url: auto?.link_url,
-            quick_reply_label: auto?.quick_reply_label,
-          },
-        });
-      }
+    for (const f of followups || []) {
+      await db.from("queue").insert({
+        contact_id: contact.id,
+        automation_id: contact.last_automation_id,
+        kind: f.kind === "reminder" ? "reminder" : "link",
+        recipient_type: "id",
+        recipient_value: senderId,
+        needs_24h_window: true,
+        send_after: new Date(Date.now() + f.delay_minutes * 60000).toISOString(),
+        payload: {
+          welcome_message:
+            f.kind === "reminder" ? auto?.reminder_text : auto?.welcome_message,
+          link_label: auto?.link_label,
+          link_url: auto?.link_url,
+          quick_reply_label: auto?.quick_reply_label,
+        },
+      });
     }
     return;
   }

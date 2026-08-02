@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { sendMessage, publicReply, buildWelcomeMessage } from "@/lib/instagram";
+import { sendMessage, publicReply, buildLinkMessage, buildQuickReplyMessage } from "@/lib/instagram";
 
 const MAX_PER_RUN = 100; // ~limite prático de 200/h, drenado a cada minuto em lotes menores
 const DELAY_MS = 500; // ~2 por segundo
@@ -59,8 +59,19 @@ export async function POST(req: NextRequest) {
     try {
       if (item.kind === "public_reply") {
         await publicReply(item.recipient_value, config.access_token, item.payload.text);
+      } else if (item.kind === "private_reply" || item.kind === "dm") {
+        // Primeiro contato: convite com botão de resposta rápida (sem o link ainda)
+        const message = buildQuickReplyMessage(item.payload as any);
+        await sendMessage({
+          igUserId: config.ig_user_id,
+          token: config.access_token,
+          recipientType: item.recipient_type as "comment_id" | "id",
+          recipientValue: item.recipient_value,
+          message,
+        });
       } else {
-        const message = buildWelcomeMessage(item.payload as any);
+        // Followups (link / reminder): aqui sim vai o link de verdade
+        const message = buildLinkMessage(item.payload as any);
         await sendMessage({
           igUserId: config.ig_user_id,
           token: config.access_token,

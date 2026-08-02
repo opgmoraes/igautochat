@@ -67,7 +67,12 @@ async function toggleAutomation(id, active) {
 
 async function deleteAutomation(id) {
   if (!confirm('Excluir esta automação? Essa ação não pode ser desfeita.')) return;
-  await fetch('/api/automations/' + id, { method: 'DELETE' });
+  const res = await fetch('/api/automations/' + id, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json();
+    alert('Não consegui excluir: ' + (err.error || 'erro desconhecido'));
+    return;
+  }
   loadAutomations();
 }
 
