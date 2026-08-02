@@ -3,7 +3,7 @@ export default function ExclusaoDeDados() {
     <div style={{
       maxWidth: 680, margin: "0 auto", padding: "40px 24px 80px",
       fontFamily: "Inter, system-ui, sans-serif", lineHeight: 1.7,
-      background: "#0b0d10", color: "#edeef0", minHeight: "100vh"
+      background: "#FAFAF8", color: "#111110", minHeight: "100vh"
     }}>
       <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 26 }}>Exclusão de Dados</h1>
       <p>

@@ -3,9 +3,9 @@ export default function Privacidade() {
     <div style={{
       maxWidth: 680, margin: "0 auto", padding: "40px 24px 80px",
       fontFamily: "Inter, system-ui, sans-serif", lineHeight: 1.7,
-      background: "#0b0d10", color: "#edeef0", minHeight: "100vh"
+      background: "#FAFAF8", color: "#111110", minHeight: "100vh"
     }}>
-      <style>{`a { color: #5eead4; }`}</style>
+      <style>{`a { color: #058CD7; }`}</style>
       <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 26 }}>Política de Privacidade</h1>
       <p>
         Este aplicativo é uma ferramenta pessoal de automação de mensagens diretas (DM) do

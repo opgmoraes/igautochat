@@ -8,7 +8,7 @@ export function buildLoginUrl(redirectUri: string, state?: string) {
     redirect_uri: redirectUri,
     response_type: "code",
     scope:
-      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments",
+      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish",
   });
   if (state) params.set("state", state);
   return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
