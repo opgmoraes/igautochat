@@ -210,6 +210,13 @@ h1 {
 .signal-row .state.paused { color: var(--accent-yellow); filter: brightness(0.7); }
 .signal-row .meta { font-size: 13px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.auto-thumb {
+  width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex-shrink: 0;
+  border: 0.5px solid var(--border); background: var(--surface-2);
+}
+.auto-thumb-empty {
+  display: flex; align-items: center; justify-content: center;
+}
 .chip {
   font-family: var(--font-mono);
   font-size: 11px;

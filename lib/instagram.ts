@@ -63,7 +63,7 @@ export async function fetchProfile(token: string) {
 
 export async function fetchMedia(igUserId: string, token: string) {
   const params = new URLSearchParams({
-    fields: "id,media_type,media_url,thumbnail_url,caption,permalink",
+    fields: "id,media_type,media_url,thumbnail_url,caption,permalink,timestamp",
     access_token: token,
   });
   const res = await fetch(`${GRAPH_BASE}/${igUserId}/media?${params}`);

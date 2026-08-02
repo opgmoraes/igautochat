@@ -105,8 +105,13 @@ async function loadAutomations() {
       ? a.keywords.map(k => `<span class="chip">${escapeHtml(k)}</span>`).join('')
       : `<span class="chip">qualquer palavra</span>`;
 
+    const thumb = a.target_media_thumb
+      ? `<img src="${a.target_media_thumb}" alt="" class="auto-thumb" />`
+      : `<div class="auto-thumb auto-thumb-empty"></div>`;
+
     return `
       <div class="signal-row">
+        ${thumb}
         <span class="dot ${a.active ? 'live' : 'paused'}"></span>
         <div class="content">
           <div class="top-line">

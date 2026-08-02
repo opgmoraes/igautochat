@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       keywords,
       match_type: body.match_type || "contains",
       target_media_id: body.target_media_id || null,
+      target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,
       welcome_message: body.welcome_message || "",
       quick_reply_label: body.quick_reply_label || "Quero!",
