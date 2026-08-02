@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Entrar — Meu ManyChat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+  .login-box {
+    width: 100%; max-width: 340px; background: var(--surface);
+    border: 0.5px solid var(--border); border-radius: var(--radius-lg);
+    padding: 36px 28px; text-align: center; box-shadow: 3px 3px 0 #000;
+  }
+  .login-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 4px 0 6px; }
+  .login-sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 22px; }
+  #login-form { display: flex; flex-direction: column; gap: 10px; }
+  .login-error { color: var(--accent-red); font-size: 12.5px; margin: 12px 0 0; min-height: 16px; font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="eyebrow" style="justify-content:center">painel · instagram</div>
+    <div class="login-title">Meu ManyChat</div>
+    <p class="login-sub">Entre com a senha pra acessar a central</p>
+    <form id="login-form">
+      <input type="password" id="password" placeholder="Senha" required autofocus />
+      <button type="submit" class="btn primary submit-btn">Entrar</button>
+    </form>
+    <div class="login-error" id="login-error"></div>
+  </div>
+
+<script>
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const password = document.getElementById('password').value;
+  const errorEl = document.getElementById('login-error');
+  errorEl.textContent = '';
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+
+  if (res.ok) {
+    window.location.href = '/dashboard.html';
+  } else {
+    errorEl.textContent = 'Senha incorreta.';
+  }
+});
+</script>
+</body>
+</html>

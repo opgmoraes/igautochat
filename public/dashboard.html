@@ -7,12 +7,52 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
+<style>
+  .top-bar { display: flex; justify-content: space-between; align-items: flex-start; }
+  .stats-strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--surface);
+    padding: 14px 16px;
+  }
+  .stat-card .num { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+  .stat-card .lbl { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+  .stat-card.warn .num { color: var(--accent-red); }
+  .banner {
+    border: 1.5px solid var(--accent-yellow); background: #FFF8E8; border-radius: var(--radius);
+    padding: 12px 16px; font-size: 13px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .banner.danger { border-color: var(--accent-red); background: #FFF0EE; }
+
+  .events-log { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .event-row {
+    display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px;
+    border: 0.5px solid var(--border); border-radius: 8px; background: var(--surface);
+    font-size: 12.5px;
+  }
+  .event-row .who { font-family: var(--font-mono); }
+  .event-row .status-tag { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+  .status-tag.sent { background: #E6F7EF; color: var(--accent-green); }
+  .status-tag.failed { background: #FDEAE8; color: var(--accent-red); }
+  .status-tag.pending, .status-tag.sending { background: var(--surface-2); color: var(--text-muted); }
+  .status-tag.skipped { background: var(--surface-2); color: var(--text-muted); }
+  .event-time { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+</style>
 </head>
 <body>
-  <div class="eyebrow"><span id="clock-dot" class="dot off"></span> painel · instagram</div>
-  <h1>Central de Sinal</h1>
+  <div class="top-bar">
+    <div>
+      <div class="eyebrow"><span id="clock-dot" class="dot off"></span> painel · instagram</div>
+      <h1>Central de Sinal</h1>
+    </div>
+    <button class="btn small" id="logout-btn">Sair</button>
+  </div>
 
   <div id="connection-box"></div>
+  <div id="alerts"></div>
+  <div class="stats-strip" id="stats-strip"></div>
 
   <div class="row">
     <h2>Automações<span class="count" id="auto-count"></span></h2>
@@ -21,7 +61,17 @@
 
   <div id="automations-list"></div>
 
+  <div class="row">
+    <h2>Atividade recente</h2>
+  </div>
+  <div class="events-log" id="events-log"></div>
+
 <script>
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});
+
 async function loadConfig() {
   const res = await fetch('/api/config');
   const { config } = await res.json();
@@ -54,6 +104,38 @@ async function loadConfig() {
         </div>
       </div>`;
   }
+}
+
+async function loadStats() {
+  const res = await fetch('/api/stats');
+  const stats = await res.json();
+  const strip = document.getElementById('stats-strip');
+  const alerts = document.getElementById('alerts');
+
+  strip.innerHTML = `
+    <div class="stat-card">
+      <div class="num">${stats.sentWeek}</div>
+      <div class="lbl">DMs essa semana</div>
+    </div>
+    <div class="stat-card ${stats.failed24h > 0 ? 'warn' : ''}">
+      <div class="num">${stats.failed24h}</div>
+      <div class="lbl">falhas nas últimas 24h</div>
+    </div>
+  `;
+
+  let alertHtml = '';
+  if (stats.failed24h > 0) {
+    alertHtml += `<div class="banner danger">⚠️ ${stats.failed24h} envio(s) falharam nas últimas 24h. Confira o log de atividade abaixo.</div>`;
+  }
+  if (stats.tokenExpiresAt) {
+    const daysLeft = Math.floor((new Date(stats.tokenExpiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+    if (daysLeft < 0) {
+      alertHtml += `<div class="banner danger">🔒 Seu token do Instagram expirou. Clique em "Conectar" pra renovar.</div>`;
+    } else if (daysLeft <= 7) {
+      alertHtml += `<div class="banner">⏳ Seu token do Instagram expira em ${daysLeft} dia(s). A renovação automática deve cuidar disso, mas fique de olho.</div>`;
+    }
+  }
+  alerts.innerHTML = alertHtml;
 }
 
 async function toggleAutomation(id, active) {
@@ -121,10 +203,39 @@ async function loadAutomations() {
           <div class="meta">Gatilhos: ${gatilhos}</div>
           <div class="chips">${keywords}</div>
           <div class="actions">
+            <a href="/new-automation.html?id=${a.id}" class="btn small">Editar</a>
             <button class="btn small" onclick="toggleAutomation('${a.id}', ${!a.active})">${a.active ? 'Pausar' : 'Ativar'}</button>
             <button class="btn small danger" onclick="deleteAutomation('${a.id}')">Excluir</button>
           </div>
         </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadEvents() {
+  const res = await fetch('/api/events');
+  const { items } = await res.json();
+  const log = document.getElementById('events-log');
+
+  if (!items || items.length === 0) {
+    log.innerHTML = '<p class="empty" style="padding:20px">Nenhuma atividade ainda.</p>';
+    return;
+  }
+
+  const kindLabel = { private_reply: 'resposta privada', dm: 'DM', public_reply: 'resposta pública', link: 'link (followup)', reminder: 'lembrete' };
+
+  log.innerHTML = items.map(it => {
+    const who = it.contacts?.username ? '@' + it.contacts.username : (it.contacts?.ig_scoped_id || 'contato');
+    const autoName = it.automations?.name || '—';
+    const time = new Date(it.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="event-row">
+        <div>
+          <span class="status-tag ${it.status}">${it.status}</span>
+          <span class="who"> ${escapeHtml(who)}</span> — ${kindLabel[it.kind] || it.kind} · ${escapeHtml(autoName)}
+          ${it.error ? `<div style="color:var(--accent-red);font-family:var(--font-mono);font-size:11px;margin-top:4px">${escapeHtml(it.error).slice(0,120)}</div>` : ''}
+        </div>
+        <div class="event-time">${time}</div>
       </div>`;
   }).join('');
 }
@@ -136,7 +247,9 @@ function escapeHtml(str) {
 }
 
 loadConfig();
+loadStats();
 loadAutomations();
+loadEvents();
 </script>
 </body>
 </html>

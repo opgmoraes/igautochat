@@ -196,6 +196,47 @@
 <script>
 let selectedThumb = '';
 const variants = [];
+const params = new URLSearchParams(window.location.search);
+const editId = params.get('id');
+
+if (editId) {
+  document.querySelector('h1').textContent = 'Editar automação';
+  document.querySelector('.eyebrow').textContent = 'editando sinal';
+  document.querySelector('.submit-btn').textContent = 'Salvar alterações';
+}
+
+async function loadForEdit() {
+  if (!editId) return;
+  const res = await fetch('/api/automations/' + editId);
+  if (!res.ok) return;
+  const { automation: a } = await res.json();
+  const form = document.getElementById('form');
+  form.name.value = a.name || '';
+  form.trigger_comment.checked = a.trigger_comment;
+  form.trigger_story_reply.checked = a.trigger_story_reply;
+  form.trigger_dm.checked = a.trigger_dm;
+  form.keywords.value = (a.keywords || []).join(', ');
+  form.match_type.value = a.match_type || 'contains';
+  form.welcome_message.value = a.welcome_message || '';
+  form.quick_reply_label.value = a.quick_reply_label || 'Quero!';
+  form.link_label.value = a.link_label || 'Acessar';
+  form.link_url.value = a.link_url || '';
+  form.reminder_text.value = a.reminder_text || '';
+  form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
+  document.getElementById('target_media_id').value = a.target_media_id || '';
+  document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
+  (a.public_replies || []).forEach(v => variants.push(v));
+  renderVariants();
+  updatePreview();
+  markMediaSelected(a.target_media_id);
+}
+
+function markMediaSelected(mediaId) {
+  document.querySelectorAll('.media-card').forEach(c => {
+    const match = mediaId ? c.dataset.id === mediaId : c.classList.contains('any');
+    c.classList.toggle('selected', match);
+  });
+}
 
 // ---------- grade de posts ----------
 async function loadMedia() {
@@ -301,17 +342,17 @@ document.getElementById('form').addEventListener('submit', async (e) => {
 
   const status = document.getElementById('status');
   status.className = '';
-  status.textContent = 'Criando...';
+  status.textContent = editId ? 'Salvando...' : 'Criando...';
 
-  const res = await fetch('/api/automations', {
-    method: 'POST',
+  const res = await fetch(editId ? '/api/automations/' + editId : '/api/automations', {
+    method: editId ? 'PATCH' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
 
   if (res.ok) {
     status.className = 'ok';
-    status.textContent = 'Criada — voltando pra central...';
+    status.textContent = (editId ? 'Salvo' : 'Criada') + ' — voltando pra central...';
     window.location.href = '/dashboard.html';
   } else {
     const err = await res.json();
@@ -320,7 +361,7 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   }
 });
 
-loadMedia();
+loadMedia().then(loadForEdit);
 updatePreview();
 </script>
 </body>
