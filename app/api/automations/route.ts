@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { requireUser } from "@/lib/authGuard";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const user = await requireUser(req);
+  if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+
   const db = supabaseAdmin();
   const { data } = await db.from("automations").select("*").order("created_at", { ascending: false });
   return NextResponse.json({ automations: data || [] });
 }
 
 export async function POST(req: NextRequest) {
+  const user = await requireUser(req);
+  if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+
   const body = await req.json();
   const db = supabaseAdmin();
 
@@ -32,10 +39,13 @@ export async function POST(req: NextRequest) {
       keywords,
       match_type: body.match_type || "contains",
       target_media_id: body.target_media_id || null,
+      target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,
       welcome_message: body.welcome_message || "",
       quick_reply_label: body.quick_reply_label || "Quero!",
+      pre_link_message: body.pre_link_message || null,
+      pre_link_quick_reply_label: body.pre_link_quick_reply_label || "Já segui!",
       link_label: body.link_label || "Acessar",
       link_url: body.link_url || "",
       reminder_text: body.reminder_text || null,

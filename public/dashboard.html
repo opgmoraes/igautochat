@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
+<script src="/auth.js"></script>
 <style>
   .top-bar { display: flex; justify-content: space-between; align-items: flex-start; }
   .stats-strip {
@@ -68,12 +69,13 @@
 
 <script>
 document.getElementById('logout-btn').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  const sb = await window.initAuth();
+  await sb.auth.signOut();
   window.location.href = '/login.html';
 });
 
 async function loadConfig() {
-  const res = await fetch('/api/config');
+  const res = await authFetch('/api/config');
   const { config } = await res.json();
   const box = document.getElementById('connection-box');
   const clockDot = document.getElementById('clock-dot');
@@ -107,7 +109,7 @@ async function loadConfig() {
 }
 
 async function loadStats() {
-  const res = await fetch('/api/stats');
+  const res = await authFetch('/api/stats');
   const stats = await res.json();
   const strip = document.getElementById('stats-strip');
   const alerts = document.getElementById('alerts');
@@ -139,7 +141,7 @@ async function loadStats() {
 }
 
 async function toggleAutomation(id, active) {
-  await fetch('/api/automations/' + id, {
+  await authFetch('/api/automations/' + id, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active })
@@ -149,7 +151,7 @@ async function toggleAutomation(id, active) {
 
 async function deleteAutomation(id) {
   if (!confirm('Excluir esta automação? Essa ação não pode ser desfeita.')) return;
-  const res = await fetch('/api/automations/' + id, { method: 'DELETE' });
+  const res = await authFetch('/api/automations/' + id, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json();
     alert('Não consegui excluir: ' + (err.error || 'erro desconhecido'));
@@ -159,7 +161,7 @@ async function deleteAutomation(id) {
 }
 
 async function loadAutomations() {
-  const res = await fetch('/api/automations');
+  const res = await authFetch('/api/automations');
   const { automations } = await res.json();
   const list = document.getElementById('automations-list');
   const count = document.getElementById('auto-count');
@@ -213,7 +215,7 @@ async function loadAutomations() {
 }
 
 async function loadEvents() {
-  const res = await fetch('/api/events');
+  const res = await authFetch('/api/events');
   const { items } = await res.json();
   const log = document.getElementById('events-log');
 
@@ -246,10 +248,14 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-loadConfig();
-loadStats();
-loadAutomations();
-loadEvents();
+(async () => {
+  const session = await window.requireAuth();
+  if (!session) return; // já foi redirecionado pro login
+  loadConfig();
+  loadStats();
+  loadAutomations();
+  loadEvents();
+})();
 </script>
 </body>
 </html>

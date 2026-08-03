@@ -152,21 +152,16 @@ export function buildLinkMessage(auto: {
   return { text: auto.welcome_message };
 }
 
-// Mensagem 1: enviada assim que o comentário/DM bate a palavra-chave.
-// É só um convite com botão de RESPOSTA RÁPIDA (gera evento de volta pro webhook).
-// NÃO contém o link ainda — isso evita o bug de o botão "vazar" o link direto
-// e nunca abrir a janela de 24h pro lembrete funcionar.
-export function buildQuickReplyMessage(auto: {
-  welcome_message: string;
-  quick_reply_label: string;
-}): SendPayload {
+// Mensagem de convite com botão de RESPOSTA RÁPIDA (gera evento de volta pro webhook).
+// Usada tanto pro convite inicial quanto pra etapa intermediária do funil (ex: pedir follow).
+export function buildQuickReplyMessage(text: string, buttonLabel: string, payload: string): SendPayload {
   return {
-    text: auto.welcome_message || "Oi!",
+    text: text || "Oi!",
     quick_replies: [
       {
         content_type: "text",
-        title: (auto.quick_reply_label || "Quero!").slice(0, 20),
-        payload: "SEND_LINK",
+        title: (buttonLabel || "Continuar").slice(0, 20),
+        payload,
       },
     ],
   };

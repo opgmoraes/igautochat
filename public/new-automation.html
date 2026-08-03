@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
+<script src="/auth.js"></script>
 <style>
   .layout { display: grid; grid-template-columns: 1fr; gap: 32px; }
   @media (min-width: 900px) {
@@ -126,9 +127,16 @@
     </div>
 
     <div class="field">
-      <label>Post/reels específico <span class="hint">opcional — clique numa imagem</span></label>
-      <div class="media-grid" id="media-grid">
-        <div class="media-card any selected" data-id="" data-thumb="">Qualquer<br/>post</div>
+      <label>Alvo do post <span class="hint">onde a automação vai escutar</span></label>
+      <fieldset style="margin-bottom:0">
+        <label class="check-row"><input type="radio" name="target_mode" value="any" checked /> Qualquer post</label>
+        <label class="check-row"><input type="radio" name="target_mode" value="specific" /> Post específico (já publicado)</label>
+        <label class="check-row"><input type="radio" name="target_mode" value="latest" /> Meu próximo post <span class="hint">funciona com agendados</span></label>
+      </fieldset>
+      <p id="latest-hint" style="display:none;font-size:12px;color:var(--text-secondary);margin:8px 0 0">
+        Assim que você publicar (ou um post agendado sair do forno), essa automação passa a valer pra ele automaticamente — sem precisar voltar aqui pra selecionar.
+      </p>
+      <div class="media-grid" id="media-grid" style="margin-top:12px">
         <div class="media-loading">Carregando seus posts...</div>
       </div>
       <input type="hidden" name="target_media_id" id="target_media_id" value="" />
@@ -152,6 +160,24 @@
       <label>Rótulo do botão de resposta rápida</label>
       <input name="quick_reply_label" id="quick_reply_label" value="Quero!" />
     </div>
+
+    <fieldset>
+      <legend>Etapa extra antes do link (opcional)</legend>
+      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px">
+        Cria um passo a mais no meio do caminho — por exemplo, pedir pra seguir sua conta.
+        <br/><b>Importante:</b> a API do Instagram não deixa confirmar se a pessoa realmente seguiu,
+        então isso é só um pedido educado, não uma trava de verdade.
+      </p>
+      <button type="button" class="btn small" id="fill-follow-template">Preencher com pedido de follow</button>
+      <div class="field" style="margin-top:12px">
+        <label>Mensagem dessa etapa</label>
+        <textarea name="pre_link_message" id="pre_link_message" rows="2" placeholder="Antes de mandar o link, dá um help seguindo lá! 🙏"></textarea>
+      </div>
+      <div class="field">
+        <label>Rótulo do botão dessa etapa</label>
+        <input name="pre_link_quick_reply_label" id="pre_link_quick_reply_label" value="Já segui!" />
+      </div>
+    </fieldset>
 
     <div class="field">
       <label>Rótulo do botão do link</label>
@@ -180,10 +206,15 @@
   <aside>
     <div class="phone-preview">
       <div class="phone-bar">prévia da conversa</div>
-      <div class="phone-screen">
+      <div class="phone-screen" id="phone-screen">
         <div class="msg-bubble-in" id="preview-welcome">Oi! Toca no botão abaixo pra receber o link</div>
         <div class="qr-row"><span class="qr-btn" id="preview-qr">Quero!</span></div>
-        <div class="preview-label">depois do clique</div>
+        <div id="preview-prelink-block" style="display:none">
+          <div class="preview-label">depois do 1º clique</div>
+          <div class="msg-bubble-in" id="preview-prelink-text"></div>
+          <div class="qr-row"><span class="qr-btn" id="preview-prelink-btn"></span></div>
+        </div>
+        <div class="preview-label" id="preview-final-label">depois do clique</div>
         <div class="link-btn">
           <div class="txt" id="preview-welcome-2">Oi! Toca no botão abaixo pra receber o link</div>
           <div class="cta" id="preview-link-label">Acessar</div>
@@ -207,7 +238,7 @@ if (editId) {
 
 async function loadForEdit() {
   if (!editId) return;
-  const res = await fetch('/api/automations/' + editId);
+  const res = await authFetch('/api/automations/' + editId);
   if (!res.ok) return;
   const { automation: a } = await res.json();
   const form = document.getElementById('form');
@@ -219,12 +250,17 @@ async function loadForEdit() {
   form.match_type.value = a.match_type || 'contains';
   form.welcome_message.value = a.welcome_message || '';
   form.quick_reply_label.value = a.quick_reply_label || 'Quero!';
+  form.pre_link_message.value = a.pre_link_message || '';
+  form.pre_link_quick_reply_label.value = a.pre_link_quick_reply_label || 'Já segui!';
   form.link_label.value = a.link_label || 'Acessar';
   form.link_url.value = a.link_url || '';
   form.reminder_text.value = a.reminder_text || '';
   form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
   document.getElementById('target_media_id').value = a.target_media_id || '';
   document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
+  const modeRadio = document.querySelector(`input[name="target_mode"][value="${a.target_mode || 'any'}"]`);
+  if (modeRadio) modeRadio.checked = true;
+  updateTargetModeUI();
   (a.public_replies || []).forEach(v => variants.push(v));
   renderVariants();
   updatePreview();
@@ -233,16 +269,30 @@ async function loadForEdit() {
 
 function markMediaSelected(mediaId) {
   document.querySelectorAll('.media-card').forEach(c => {
-    const match = mediaId ? c.dataset.id === mediaId : c.classList.contains('any');
-    c.classList.toggle('selected', match);
+    c.classList.toggle('selected', mediaId && c.dataset.id === mediaId);
   });
 }
 
-// ---------- grade de posts ----------
+// ---------- alvo do post: qualquer / específico / próximo ----------
+document.querySelectorAll('input[name="target_mode"]').forEach(r => {
+  r.addEventListener('change', updateTargetModeUI);
+});
+function updateTargetModeUI() {
+  const mode = document.querySelector('input[name="target_mode"]:checked').value;
+  document.getElementById('media-grid').style.display = mode === 'specific' ? '' : 'none';
+  document.getElementById('latest-hint').style.display = mode === 'latest' ? '' : 'none';
+  if (mode !== 'specific') {
+    document.getElementById('target_media_id').value = '';
+    document.getElementById('target_media_thumb').value = '';
+  }
+}
+updateTargetModeUI();
+
+// ---------- grade de posts (só usada no modo "post específico") ----------
 async function loadMedia() {
   const grid = document.getElementById('media-grid');
   try {
-    const res = await fetch('/api/media');
+    const res = await authFetch('/api/media');
     const { media, error } = await res.json();
     const loading = grid.querySelector('.media-loading');
     if (loading) loading.remove();
@@ -266,10 +316,6 @@ async function loadMedia() {
         : `<div class="check">✓</div>`;
       card.addEventListener('click', () => selectMedia(card));
       grid.appendChild(card);
-    });
-
-    grid.querySelector('.media-card.any').addEventListener('click', function () {
-      selectMedia(this);
     });
   } catch (e) {
     grid.innerHTML = '<div class="media-loading">Não foi possível carregar os posts.</div>';
@@ -316,12 +362,33 @@ function updatePreview() {
   const welcome = document.getElementById('welcome_message').value || 'Oi! Toca no botão abaixo pra receber o link';
   const qr = document.getElementById('quick_reply_label').value || 'Quero!';
   const linkLabel = document.getElementById('link_label').value || 'Acessar';
+  const preMsg = document.getElementById('pre_link_message').value;
+  const preLabel = document.getElementById('pre_link_quick_reply_label').value || 'Já segui!';
+
   document.getElementById('preview-welcome').textContent = welcome;
   document.getElementById('preview-welcome-2').textContent = welcome;
   document.getElementById('preview-qr').textContent = qr;
   document.getElementById('preview-link-label').textContent = linkLabel;
+
+  const preBlock = document.getElementById('preview-prelink-block');
+  if (preMsg && preMsg.trim()) {
+    preBlock.style.display = '';
+    document.getElementById('preview-prelink-text').textContent = preMsg;
+    document.getElementById('preview-prelink-btn').textContent = preLabel;
+    document.getElementById('preview-final-label').textContent = 'depois do 2º clique';
+  } else {
+    preBlock.style.display = 'none';
+    document.getElementById('preview-final-label').textContent = 'depois do clique';
+  }
 }
-['welcome_message', 'quick_reply_label', 'link_label'].forEach(id => {
+document.getElementById('fill-follow-template').addEventListener('click', () => {
+  document.getElementById('pre_link_message').value =
+    'Antes de mandar o link, dá um help seguindo minha conta! 🙏 Depois é só clicar aqui embaixo que eu mando.';
+  document.getElementById('pre_link_quick_reply_label').value = 'Já segui!';
+  updatePreview();
+});
+
+['welcome_message', 'quick_reply_label', 'link_label', 'pre_link_message', 'pre_link_quick_reply_label'].forEach(id => {
   document.getElementById(id).addEventListener('input', updatePreview);
 });
 
@@ -344,7 +411,7 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   status.className = '';
   status.textContent = editId ? 'Salvando...' : 'Criando...';
 
-  const res = await fetch(editId ? '/api/automations/' + editId : '/api/automations', {
+  const res = await authFetch(editId ? '/api/automations/' + editId : '/api/automations', {
     method: editId ? 'PATCH' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -361,8 +428,13 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   }
 });
 
-loadMedia().then(loadForEdit);
-updatePreview();
+(async () => {
+  const session = await window.requireAuth();
+  if (!session) return;
+  await loadMedia();
+  await loadForEdit();
+  updatePreview();
+})();
 </script>
 </body>
 </html>

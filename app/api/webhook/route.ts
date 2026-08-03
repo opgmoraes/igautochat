@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { matches } from "@/lib/instagram";
+import { matches, fetchMedia } from "@/lib/instagram";
 
 // --- 1) Handshake de verificação (Meta faz um GET ao cadastrar o webhook) ---
 export async function GET(req: NextRequest) {
@@ -81,8 +81,25 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
     .eq("active", true)
     .eq("trigger_comment", true);
 
+  // Se alguma automação usa "meu próximo post", busca o post mais recente 1x só
+  // (assim funciona pra posts agendados: quando publicam, viram o post mais novo automaticamente)
+  let latestMediaId: string | null | undefined;
+  const needsLatest = (autos || []).some((a) => a.target_mode === "latest");
+  if (needsLatest) {
+    try {
+      const { data: config } = await db.from("config").select("*").eq("id", 1).single();
+      if (config?.access_token && config?.ig_user_id) {
+        const res = await fetchMedia(config.ig_user_id, config.access_token);
+        latestMediaId = res.data?.[0]?.id || null;
+      }
+    } catch {
+      latestMediaId = null;
+    }
+  }
+
   for (const auto of autos || []) {
-    if (auto.target_media_id && auto.target_media_id !== mediaId) continue;
+    if (auto.target_mode === "specific" && auto.target_media_id && auto.target_media_id !== mediaId) continue;
+    if (auto.target_mode === "latest" && latestMediaId && latestMediaId !== mediaId) continue;
     if (!matches(auto.keywords, auto.match_type, text)) continue;
 
     // upsert do contato
@@ -110,6 +127,8 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
         link_label: auto.link_label,
         link_url: auto.link_url,
         quick_reply_label: auto.quick_reply_label,
+        pre_link_message: auto.pre_link_message,
+        pre_link_quick_reply_label: auto.pre_link_quick_reply_label,
       },
     });
 
@@ -144,30 +163,10 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
     .select()
     .single();
 
-  // Se a pessoa tocou no botão de resposta rápida -> abre a janela de 24h e enfileira followups
-  // (Importante: só dispara no clique real do botão, nunca em texto solto, senão reenvia toda hora)
+  // Se a pessoa tocou num botão de resposta rápida -> decide a próxima etapa
+  // usando o "payload" que veio junto do clique (não o texto solto, nunca dispara nisso)
   if (isQuickReplyClick && contact.last_automation_id) {
-    // Evita reenviar se esse contato+automação já teve followups enfileirados antes
-    const { data: already } = await db
-      .from("queue")
-      .select("id")
-      .eq("contact_id", contact.id)
-      .eq("automation_id", contact.last_automation_id)
-      .in("kind", ["link", "reminder"])
-      .limit(1);
-
-    if (already && already.length > 0) return; // já processado, não duplica
-
-    await db
-      .from("contacts")
-      .update({ last_reply_at: new Date().toISOString() })
-      .eq("id", contact.id);
-
-    const { data: followups } = await db
-      .from("followups")
-      .select("*")
-      .eq("automation_id", contact.last_automation_id)
-      .order("step");
+    const clickPayload: string = msg.message?.quick_reply?.payload || "STEP_LINK";
 
     const { data: auto } = await db
       .from("automations")
@@ -175,23 +174,74 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
       .eq("id", contact.last_automation_id)
       .single();
 
-    for (const f of followups || []) {
+    if (!auto) return;
+
+    // Etapa intermediária do funil (ex: "pede pra seguir antes")
+    if (clickPayload === "STEP_PRELINK") {
+      // evita reenviar se já mandou essa etapa pra esse contato+automação
+      const { data: already } = await db
+        .from("queue")
+        .select("id")
+        .eq("contact_id", contact.id)
+        .eq("automation_id", contact.last_automation_id)
+        .eq("kind", "prelink")
+        .limit(1);
+      if (already && already.length > 0) return;
+
       await db.from("queue").insert({
         contact_id: contact.id,
         automation_id: contact.last_automation_id,
-        kind: f.kind === "reminder" ? "reminder" : "link",
+        kind: "prelink",
         recipient_type: "id",
         recipient_value: senderId,
-        needs_24h_window: true,
-        send_after: new Date(Date.now() + f.delay_minutes * 60000).toISOString(),
+        needs_24h_window: false, // conversa está aberta, acabou de responder
         payload: {
-          welcome_message:
-            f.kind === "reminder" ? auto?.reminder_text : auto?.welcome_message,
-          link_label: auto?.link_label,
-          link_url: auto?.link_url,
-          quick_reply_label: auto?.quick_reply_label,
+          text: auto.pre_link_message,
+          button_label: auto.pre_link_quick_reply_label,
+          next_payload: "STEP_LINK",
         },
       });
+      return;
+    }
+
+    // Etapa final: manda o link de verdade (+ agenda o lembrete, se configurado)
+    if (clickPayload === "STEP_LINK") {
+      const { data: already } = await db
+        .from("queue")
+        .select("id")
+        .eq("contact_id", contact.id)
+        .eq("automation_id", contact.last_automation_id)
+        .in("kind", ["link", "reminder"])
+        .limit(1);
+      if (already && already.length > 0) return; // já processado, não duplica
+
+      await db
+        .from("contacts")
+        .update({ last_reply_at: new Date().toISOString() })
+        .eq("id", contact.id);
+
+      const { data: followups } = await db
+        .from("followups")
+        .select("*")
+        .eq("automation_id", contact.last_automation_id)
+        .order("step");
+
+      for (const f of followups || []) {
+        await db.from("queue").insert({
+          contact_id: contact.id,
+          automation_id: contact.last_automation_id,
+          kind: f.kind === "reminder" ? "reminder" : "link",
+          recipient_type: "id",
+          recipient_value: senderId,
+          needs_24h_window: true,
+          send_after: new Date(Date.now() + f.delay_minutes * 60000).toISOString(),
+          payload: {
+            welcome_message: f.kind === "reminder" ? auto.reminder_text : auto.welcome_message,
+            link_label: auto.link_label,
+            link_url: auto.link_url,
+          },
+        });
+      }
     }
     return;
   }
@@ -218,6 +268,8 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
         link_label: auto.link_label,
         link_url: auto.link_url,
         quick_reply_label: auto.quick_reply_label,
+        pre_link_message: auto.pre_link_message,
+        pre_link_quick_reply_label: auto.pre_link_quick_reply_label,
       },
     });
     break;

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { requireUser } from "@/lib/authGuard";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser(req);
+  if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+
   const { id } = await params;
   const db = supabaseAdmin();
   const { data, error } = await db.from("automations").select("*").eq("id", id).single();
@@ -10,6 +14,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser(req);
+  if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+
   const { id } = await params;
   const body = await req.json();
   const db = supabaseAdmin();
@@ -40,10 +47,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       keywords,
       match_type: body.match_type || "contains",
       target_media_id: body.target_media_id || null,
+      target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,
       welcome_message: body.welcome_message || "",
       quick_reply_label: body.quick_reply_label || "Quero!",
+      pre_link_message: body.pre_link_message || null,
+      pre_link_quick_reply_label: body.pre_link_quick_reply_label || "Já segui!",
       link_label: body.link_label || "Acessar",
       link_url: body.link_url || "",
       reminder_text: body.reminder_text || null,
@@ -73,6 +83,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser(req);
+  if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+
   const { id } = await params;
   const db = supabaseAdmin();
   const { error } = await db.from("automations").delete().eq("id", id);

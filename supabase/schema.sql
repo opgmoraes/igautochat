@@ -129,3 +129,22 @@ insert into config (id) values (1) on conflict (id) do nothing;
 alter table contacts drop constraint if exists contacts_last_automation_id_fkey;
 alter table contacts add constraint contacts_last_automation_id_fkey
   foreign key (last_automation_id) references automations(id) on delete set null;
+
+-- =========================================================
+-- MIGRAÇÃO: funil de 2 etapas (ex: pedir follow antes do link)
+-- Rode isso no SQL Editor do Supabase (uma vez só)
+-- =========================================================
+alter table automations add column if not exists pre_link_message text;
+alter table automations add column if not exists pre_link_quick_reply_label text default 'Já segui!';
+
+-- Libera o novo tipo de item de fila usado na etapa intermediária do funil
+alter table queue drop constraint if exists queue_kind_check;
+alter table queue add constraint queue_kind_check
+  check (kind in ('private_reply','dm','public_reply','link','reminder','prelink'));
+
+-- =========================================================
+-- MIGRAÇÃO: modo "meu próximo post" (funciona com posts agendados)
+-- Rode isso no SQL Editor do Supabase (uma vez só)
+-- =========================================================
+alter table automations add column if not exists target_mode text not null default 'any'
+  check (target_mode in ('any', 'specific', 'latest'));

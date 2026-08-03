@@ -60,8 +60,29 @@ export async function POST(req: NextRequest) {
       if (item.kind === "public_reply") {
         await publicReply(item.recipient_value, config.access_token, item.payload.text);
       } else if (item.kind === "private_reply" || item.kind === "dm") {
-        // Primeiro contato: convite com botão de resposta rápida (sem o link ainda)
-        const message = buildQuickReplyMessage(item.payload as any);
+        // Primeiro contato: convite com botão de resposta rápida (sem o link ainda).
+        // Se a automação tiver etapa de pré-link (ex: pedir follow), o botão leva pra lá;
+        // senão, vai direto pra etapa final.
+        const nextStep = item.payload.pre_link_message ? "STEP_PRELINK" : "STEP_LINK";
+        const message = buildQuickReplyMessage(
+          item.payload.welcome_message,
+          item.payload.quick_reply_label,
+          nextStep
+        );
+        await sendMessage({
+          igUserId: config.ig_user_id,
+          token: config.access_token,
+          recipientType: item.recipient_type as "comment_id" | "id",
+          recipientValue: item.recipient_value,
+          message,
+        });
+      } else if (item.kind === "prelink") {
+        // Etapa intermediária do funil (ex: "segue lá antes")
+        const message = buildQuickReplyMessage(
+          item.payload.text,
+          item.payload.button_label,
+          item.payload.next_payload || "STEP_LINK"
+        );
         await sendMessage({
           igUserId: config.ig_user_id,
           token: config.access_token,
