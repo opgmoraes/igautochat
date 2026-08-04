@@ -11,14 +11,47 @@
 <style>
   .layout { display: grid; grid-template-columns: 1fr; gap: 32px; }
   @media (min-width: 900px) {
-    body { max-width: 1040px; }
+    body { max-width: 1080px; }
     .layout { grid-template-columns: 1fr 320px; align-items: start; }
   }
+
+  /* --- construtor de fluxo --- */
+  .flow-list { display: flex; flex-direction: column; gap: 0; }
+  .step-card {
+    position: relative; border: 0.5px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--surface); padding: 16px 18px; margin-bottom: 4px;
+  }
+  .step-card.link-step { border-color: var(--accent-green); border-width: 1.5px; background: #F3FBF7; }
+  .step-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .step-badge {
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono);
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
+  }
+  .step-badge .num {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--surface-2);
+    display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);
+    font-weight: 700; font-size: 11px;
+  }
+  .link-step .step-badge .num { background: var(--accent-green); color: #fff; }
+  .step-remove {
+    background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 4px;
+  }
+  .step-remove:hover { color: var(--accent-red); }
+  .step-connector {
+    display: flex; align-items: center; justify-content: center; padding: 6px 0;
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);
+  }
+  .step-connector::before, .step-connector::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .step-connector span { padding: 0 10px; white-space: nowrap; }
+  .step-row { display: flex; gap: 10px; }
+  .step-row .grow { flex: 1; }
+  .step-row .btn-field { width: 130px; flex-shrink: 0; }
+  .add-step-btn { width: 100%; margin: 10px 0 4px; justify-content: center; border-style: dashed; }
 
   /* --- grade de posts --- */
   .media-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-    gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;
+    gap: 8px; max-height: 240px; overflow-y: auto; padding: 4px;
   }
   .media-card {
     position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden;
@@ -32,10 +65,6 @@
     align-items: center; justify-content: center; font-weight: 700;
   }
   .media-card.selected .check { display: flex; }
-  .media-card.any {
-    display: flex; align-items: center; justify-content: center; flex-direction: column;
-    font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-align: center; gap: 2px; padding: 4px;
-  }
   .media-loading { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); padding: 12px 4px; }
 
   /* --- chips de variação --- */
@@ -43,19 +72,14 @@
     border: 0.5px solid var(--border); border-radius: 8px; padding: 8px; background: var(--surface);
     display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   }
-  .chip-input-wrap input {
-    border: none; flex: 1; min-width: 140px; padding: 6px 4px; box-shadow: none;
-  }
+  .chip-input-wrap input { border: none; flex: 1; min-width: 140px; padding: 6px 4px; box-shadow: none; }
   .chip-input-wrap input:focus { box-shadow: none; }
   .variant-chip {
     display: flex; align-items: center; gap: 6px;
     font-family: var(--font-mono); font-size: 12px; padding: 5px 6px 5px 10px;
     background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 999px;
   }
-  .variant-chip button {
-    background: none; border: none; color: var(--text-muted); font-size: 14px; line-height: 1;
-    padding: 0 2px; cursor: pointer;
-  }
+  .variant-chip button { background: none; border: none; color: var(--text-muted); font-size: 14px; line-height: 1; padding: 0 2px; cursor: pointer; }
   .variant-chip button:hover { color: var(--accent-red); }
 
   /* --- prévia estilo telefone --- */
@@ -68,29 +92,18 @@
     background: var(--surface-2); padding: 10px 14px; font-family: var(--font-mono);
     font-size: 10px; color: var(--text-muted); text-align: center; border-bottom: 0.5px solid var(--border);
   }
-  .phone-screen { padding: 18px 14px; min-height: 280px; display: flex; flex-direction: column; gap: 10px; background: #efeee9; }
+  .phone-screen { padding: 18px 14px; min-height: 200px; max-height: 560px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #efeee9; }
   .msg-bubble-in {
-    align-self: flex-start; max-width: 85%; background: #fff; border: 0.5px solid var(--border);
+    align-self: flex-start; max-width: 88%; background: #fff; border: 0.5px solid var(--border);
     border-radius: 14px 14px 14px 3px; padding: 10px 13px; font-size: 13px; line-height: 1.4;
   }
   .qr-row { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 2px; }
-  .qr-btn {
-    font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px;
-    border: 1.5px solid var(--accent-blue); color: var(--accent-blue); background: #fff;
-  }
-  .link-btn {
-    align-self: flex-start; max-width: 85%; background: #fff; border: 0.5px solid var(--border);
-    border-radius: 14px; overflow: hidden; font-size: 13px;
-  }
+  .qr-btn { font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px; border: 1.5px solid var(--accent-blue); color: var(--accent-blue); background: #fff; }
+  .link-btn { align-self: flex-start; max-width: 88%; background: #fff; border: 0.5px solid var(--border); border-radius: 14px; overflow: hidden; font-size: 13px; }
   .link-btn .txt { padding: 10px 13px; }
-  .link-btn .cta {
-    text-align: center; padding: 10px; font-weight: 600; color: var(--accent-blue);
-    border-top: 0.5px solid var(--border);
-  }
-  .preview-label {
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px;
-  }
+  .link-btn .cta { text-align: center; padding: 10px; font-weight: 600; color: var(--accent-blue); border-top: 0.5px solid var(--border); }
+  .preview-tap { align-self: center; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin: 2px 0; }
+  .preview-empty { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); text-align: center; padding: 30px 10px; }
 </style>
 </head>
 <body>
@@ -134,9 +147,9 @@
         <label class="check-row"><input type="radio" name="target_mode" value="latest" /> Meu próximo post <span class="hint">funciona com agendados</span></label>
       </fieldset>
       <p id="latest-hint" style="display:none;font-size:12px;color:var(--text-secondary);margin:8px 0 0">
-        Assim que você publicar (ou um post agendado sair do forno), essa automação passa a valer pra ele automaticamente — sem precisar voltar aqui pra selecionar.
+        Assim que você publicar (ou um agendado sair do forno), essa automação passa a valer pra ele automaticamente.
       </p>
-      <div class="media-grid" id="media-grid" style="margin-top:12px">
+      <div class="media-grid" id="media-grid" style="margin-top:12px;display:none">
         <div class="media-loading">Carregando seus posts...</div>
       </div>
       <input type="hidden" name="target_media_id" id="target_media_id" value="" />
@@ -151,55 +164,25 @@
       <input type="hidden" name="public_replies" id="public_replies" value="" />
     </div>
 
-    <div class="field">
-      <label>Mensagem de boas-vindas (DM) <span class="hint">convite com botão — o link vem só depois</span></label>
-      <textarea name="welcome_message" id="welcome_message" required rows="3" placeholder="Oi! Toca no botão abaixo pra receber o link"></textarea>
+    <div class="field" style="margin-top:28px">
+      <label style="font-size:14px;color:var(--text-primary)">Fluxo de mensagens <span class="hint">na ordem que a pessoa vai receber</span></label>
+      <div class="flow-list" id="flow-list"></div>
+      <button type="button" class="btn add-step-btn" id="add-step-btn">+ Adicionar mensagem</button>
     </div>
 
-    <div class="field">
-      <label>Rótulo do botão de resposta rápida</label>
-      <input name="quick_reply_label" id="quick_reply_label" value="Quero!" />
-    </div>
-
-    <fieldset>
-      <legend>Etapa extra antes do link (opcional)</legend>
-      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px">
-        Cria um passo a mais no meio do caminho — por exemplo, pedir pra seguir sua conta.
-        <br/><b>Importante:</b> a API do Instagram não deixa confirmar se a pessoa realmente seguiu,
-        então isso é só um pedido educado, não uma trava de verdade.
-      </p>
-      <button type="button" class="btn small" id="fill-follow-template">Preencher com pedido de follow</button>
-      <div class="field" style="margin-top:12px">
-        <label>Mensagem dessa etapa</label>
-        <textarea name="pre_link_message" id="pre_link_message" rows="2" placeholder="Antes de mandar o link, dá um help seguindo lá! 🙏"></textarea>
-      </div>
+    <fieldset style="margin-top:10px">
+      <legend>Lembrete depois do link (opcional)</legend>
       <div class="field">
-        <label>Rótulo do botão dessa etapa</label>
-        <input name="pre_link_quick_reply_label" id="pre_link_quick_reply_label" value="Já segui!" />
+        <label>Texto do lembrete</label>
+        <textarea name="reminder_text" id="reminder_text" rows="2" placeholder="Ainda não viu? O link continua aqui"></textarea>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Atraso <span class="hint">minutos depois do link ser enviado</span></label>
+        <input name="reminder_delay_minutes" type="number" value="60" style="max-width:140px" />
       </div>
     </fieldset>
 
-    <div class="field">
-      <label>Rótulo do botão do link</label>
-      <input name="link_label" id="link_label" value="Acessar" />
-    </div>
-
-    <div class="field">
-      <label>URL do link</label>
-      <input name="link_url" placeholder="https://" />
-    </div>
-
-    <div class="field">
-      <label>Texto do lembrete <span class="hint">opcional</span></label>
-      <textarea name="reminder_text" rows="2" placeholder="Ainda não viu? O link continua aqui"></textarea>
-    </div>
-
-    <div class="field">
-      <label>Atraso do lembrete <span class="hint">minutos</span></label>
-      <input name="reminder_delay_minutes" type="number" value="60" />
-    </div>
-
-    <button type="submit" class="btn primary submit-btn">Criar automação</button>
+    <button type="submit" class="btn primary submit-btn" style="margin-top:20px">Criar automação</button>
     <div id="status"></div>
   </form>
 
@@ -207,26 +190,13 @@
     <div class="phone-preview">
       <div class="phone-bar">prévia da conversa</div>
       <div class="phone-screen" id="phone-screen">
-        <div class="msg-bubble-in" id="preview-welcome">Oi! Toca no botão abaixo pra receber o link</div>
-        <div class="qr-row"><span class="qr-btn" id="preview-qr">Quero!</span></div>
-        <div id="preview-prelink-block" style="display:none">
-          <div class="preview-label">depois do 1º clique</div>
-          <div class="msg-bubble-in" id="preview-prelink-text"></div>
-          <div class="qr-row"><span class="qr-btn" id="preview-prelink-btn"></span></div>
-        </div>
-        <div class="preview-label" id="preview-final-label">depois do clique</div>
-        <div class="link-btn">
-          <div class="txt" id="preview-welcome-2">Oi! Toca no botão abaixo pra receber o link</div>
-          <div class="cta" id="preview-link-label">Acessar</div>
-        </div>
+        <div class="preview-empty">Adiciona uma mensagem pra ver a prévia aqui</div>
       </div>
     </div>
   </aside>
   </div>
 
 <script>
-let selectedThumb = '';
-const variants = [];
 const params = new URLSearchParams(window.location.search);
 const editId = params.get('id');
 
@@ -236,47 +206,112 @@ if (editId) {
   document.querySelector('.submit-btn').textContent = 'Salvar alterações';
 }
 
-async function loadForEdit() {
-  if (!editId) return;
-  const res = await authFetch('/api/automations/' + editId);
-  if (!res.ok) return;
-  const { automation: a } = await res.json();
-  const form = document.getElementById('form');
-  form.name.value = a.name || '';
-  form.trigger_comment.checked = a.trigger_comment;
-  form.trigger_story_reply.checked = a.trigger_story_reply;
-  form.trigger_dm.checked = a.trigger_dm;
-  form.keywords.value = (a.keywords || []).join(', ');
-  form.match_type.value = a.match_type || 'contains';
-  form.welcome_message.value = a.welcome_message || '';
-  form.quick_reply_label.value = a.quick_reply_label || 'Quero!';
-  form.pre_link_message.value = a.pre_link_message || '';
-  form.pre_link_quick_reply_label.value = a.pre_link_quick_reply_label || 'Já segui!';
-  form.link_label.value = a.link_label || 'Acessar';
-  form.link_url.value = a.link_url || '';
-  form.reminder_text.value = a.reminder_text || '';
-  form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
-  document.getElementById('target_media_id').value = a.target_media_id || '';
-  document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
-  const modeRadio = document.querySelector(`input[name="target_mode"][value="${a.target_mode || 'any'}"]`);
-  if (modeRadio) modeRadio.checked = true;
-  updateTargetModeUI();
-  (a.public_replies || []).forEach(v => variants.push(v));
-  renderVariants();
+// ---------- estado do fluxo ----------
+let steps = [
+  { type: 'message', text: '', button_label: 'Quero!' },
+  { type: 'link', text: '', link_label: 'Acessar', link_url: '' },
+];
+const variants = [];
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.innerText = str || '';
+  return d.innerHTML;
+}
+
+// ---------- construtor de etapas ----------
+function renderFlow() {
+  const list = document.getElementById('flow-list');
+  list.innerHTML = steps.map((s, i) => {
+    const isLink = s.type === 'link';
+    const badgeLabel = isLink ? 'etapa final · link' : `mensagem ${i + 1}`;
+    const removeBtn = isLink ? '' : `<button type="button" class="step-remove" onclick="removeStep(${i})">&times;</button>`;
+
+    if (isLink) {
+      return `
+        <div class="step-card link-step">
+          <div class="step-top">
+            <span class="step-badge"><span class="num">${i + 1}</span> ${badgeLabel}</span>
+          </div>
+          <div class="field" style="margin-bottom:8px">
+            <label>Texto que acompanha o link</label>
+            <textarea rows="2" placeholder="Aqui está! 👇" oninput="updateStep(${i}, 'text', this.value)">${escapeHtml(s.text)}</textarea>
+          </div>
+          <div class="step-row">
+            <div class="grow field" style="margin-bottom:0">
+              <label>URL do link</label>
+              <input placeholder="https://" value="${escapeHtml(s.link_url)}" oninput="updateStep(${i}, 'link_url', this.value)" />
+            </div>
+            <div class="btn-field field" style="margin-bottom:0">
+              <label>Rótulo do botão</label>
+              <input value="${escapeHtml(s.link_label)}" oninput="updateStep(${i}, 'link_label', this.value)" />
+            </div>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="step-card">
+        <div class="step-top">
+          <span class="step-badge"><span class="num">${i + 1}</span> ${badgeLabel}</span>
+          ${removeBtn}
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <label>Mensagem</label>
+          <textarea rows="2" placeholder="Oi! Toca no botão pra continuar" oninput="updateStep(${i}, 'text', this.value)">${escapeHtml(s.text)}</textarea>
+        </div>
+        <div class="field" style="margin-bottom:0;max-width:200px">
+          <label>Rótulo do botão</label>
+          <input value="${escapeHtml(s.button_label)}" oninput="updateStep(${i}, 'button_label', this.value)" />
+        </div>
+      </div>
+      <div class="step-connector"><span>clique</span></div>`;
+  }).join('');
   updatePreview();
-  markMediaSelected(a.target_media_id);
 }
 
-function markMediaSelected(mediaId) {
-  document.querySelectorAll('.media-card').forEach(c => {
-    c.classList.toggle('selected', mediaId && c.dataset.id === mediaId);
-  });
+function updateStep(i, field, value) {
+  steps[i][field] = value;
+  updatePreview();
 }
 
-// ---------- alvo do post: qualquer / específico / próximo ----------
-document.querySelectorAll('input[name="target_mode"]').forEach(r => {
-  r.addEventListener('change', updateTargetModeUI);
+function removeStep(i) {
+  steps.splice(i, 1);
+  renderFlow();
+}
+
+document.getElementById('add-step-btn').addEventListener('click', () => {
+  // insere uma nova mensagem logo antes da etapa final (o link)
+  steps.splice(steps.length - 1, 0, { type: 'message', text: '', button_label: 'Continuar' });
+  renderFlow();
 });
+
+// ---------- prévia ao vivo ----------
+function updatePreview() {
+  const screen = document.getElementById('phone-screen');
+  const hasContent = steps.some(s => s.text && s.text.trim());
+  if (!hasContent) {
+    screen.innerHTML = '<div class="preview-empty">Adiciona uma mensagem pra ver a prévia aqui</div>';
+    return;
+  }
+
+  screen.innerHTML = steps.map((s, i) => {
+    if (s.type === 'link') {
+      return `
+        <div class="link-btn">
+          <div class="txt">${escapeHtml(s.text) || 'Aqui está!'}</div>
+          <div class="cta">${escapeHtml(s.link_label) || 'Acessar'}</div>
+        </div>`;
+    }
+    return `
+      <div class="msg-bubble-in">${escapeHtml(s.text) || '...'}</div>
+      <div class="qr-row"><span class="qr-btn">${escapeHtml(s.button_label) || 'Continuar'}</span></div>
+      <div class="preview-tap">↳ pessoa toca no botão</div>`;
+  }).join('');
+}
+
+// ---------- alvo do post ----------
+document.querySelectorAll('input[name="target_mode"]').forEach(r => r.addEventListener('change', updateTargetModeUI));
 function updateTargetModeUI() {
   const mode = document.querySelector('input[name="target_mode"]:checked').value;
   document.getElementById('media-grid').style.display = mode === 'specific' ? '' : 'none';
@@ -286,9 +321,7 @@ function updateTargetModeUI() {
     document.getElementById('target_media_thumb').value = '';
   }
 }
-updateTargetModeUI();
 
-// ---------- grade de posts (só usada no modo "post específico") ----------
 async function loadMedia() {
   const grid = document.getElementById('media-grid');
   try {
@@ -296,24 +329,17 @@ async function loadMedia() {
     const { media, error } = await res.json();
     const loading = grid.querySelector('.media-loading');
     if (loading) loading.remove();
-
     if (error) {
-      const p = document.createElement('div');
-      p.className = 'media-loading';
-      p.textContent = 'Erro ao buscar posts: ' + error;
-      grid.appendChild(p);
+      grid.innerHTML = `<div class="media-loading">Erro ao buscar posts: ${error}</div>`;
       return;
     }
-
     (media || []).forEach(m => {
       const img = m.thumbnail_url || m.media_url;
       const card = document.createElement('div');
       card.className = 'media-card';
       card.dataset.id = m.id;
       card.dataset.thumb = img || '';
-      card.innerHTML = img
-        ? `<img src="${img}" alt="" /><div class="check">✓</div>`
-        : `<div class="check">✓</div>`;
+      card.innerHTML = img ? `<img src="${img}" alt="" /><div class="check">✓</div>` : `<div class="check">✓</div>`;
       card.addEventListener('click', () => selectMedia(card));
       grid.appendChild(card);
     });
@@ -321,12 +347,14 @@ async function loadMedia() {
     grid.innerHTML = '<div class="media-loading">Não foi possível carregar os posts.</div>';
   }
 }
-
 function selectMedia(card) {
   document.querySelectorAll('.media-card').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
   document.getElementById('target_media_id').value = card.dataset.id || '';
   document.getElementById('target_media_thumb').value = card.dataset.thumb || '';
+}
+function markMediaSelected(mediaId) {
+  document.querySelectorAll('.media-card').forEach(c => c.classList.toggle('selected', mediaId && c.dataset.id === mediaId));
 }
 
 // ---------- chips de variação ----------
@@ -334,18 +362,12 @@ const chipInput = document.getElementById('chip-input');
 chipInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && chipInput.value.trim()) {
     e.preventDefault();
-    addVariant(chipInput.value.trim());
+    variants.push(chipInput.value.trim());
     chipInput.value = '';
+    renderVariants();
   }
 });
-function addVariant(text) {
-  variants.push(text);
-  renderVariants();
-}
-function removeVariant(i) {
-  variants.splice(i, 1);
-  renderVariants();
-}
+function removeVariant(i) { variants.splice(i, 1); renderVariants(); }
 function renderVariants() {
   document.querySelectorAll('.variant-chip').forEach(c => c.remove());
   variants.forEach((v, i) => {
@@ -357,45 +379,35 @@ function renderVariants() {
   document.getElementById('public_replies').value = variants.join('\n');
 }
 
-// ---------- prévia ao vivo ----------
-function updatePreview() {
-  const welcome = document.getElementById('welcome_message').value || 'Oi! Toca no botão abaixo pra receber o link';
-  const qr = document.getElementById('quick_reply_label').value || 'Quero!';
-  const linkLabel = document.getElementById('link_label').value || 'Acessar';
-  const preMsg = document.getElementById('pre_link_message').value;
-  const preLabel = document.getElementById('pre_link_quick_reply_label').value || 'Já segui!';
+// ---------- carregar pra edição ----------
+async function loadForEdit() {
+  if (!editId) { renderFlow(); return; }
+  const res = await authFetch('/api/automations/' + editId);
+  if (!res.ok) { renderFlow(); return; }
+  const { automation: a } = await res.json();
+  const form = document.getElementById('form');
+  form.name.value = a.name || '';
+  form.trigger_comment.checked = a.trigger_comment;
+  form.trigger_story_reply.checked = a.trigger_story_reply;
+  form.trigger_dm.checked = a.trigger_dm;
+  form.keywords.value = (a.keywords || []).join(', ');
+  form.match_type.value = a.match_type || 'contains';
+  form.reminder_text.value = a.reminder_text || '';
+  form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
+  document.getElementById('target_media_id').value = a.target_media_id || '';
+  document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
+  const modeRadio = document.querySelector(`input[name="target_mode"][value="${a.target_mode || 'any'}"]`);
+  if (modeRadio) modeRadio.checked = true;
+  updateTargetModeUI();
 
-  document.getElementById('preview-welcome').textContent = welcome;
-  document.getElementById('preview-welcome-2').textContent = welcome;
-  document.getElementById('preview-qr').textContent = qr;
-  document.getElementById('preview-link-label').textContent = linkLabel;
-
-  const preBlock = document.getElementById('preview-prelink-block');
-  if (preMsg && preMsg.trim()) {
-    preBlock.style.display = '';
-    document.getElementById('preview-prelink-text').textContent = preMsg;
-    document.getElementById('preview-prelink-btn').textContent = preLabel;
-    document.getElementById('preview-final-label').textContent = 'depois do 2º clique';
-  } else {
-    preBlock.style.display = 'none';
-    document.getElementById('preview-final-label').textContent = 'depois do clique';
+  if (Array.isArray(a.steps) && a.steps.length > 0) {
+    steps = a.steps;
   }
-}
-document.getElementById('fill-follow-template').addEventListener('click', () => {
-  document.getElementById('pre_link_message').value =
-    'Antes de mandar o link, dá um help seguindo minha conta! 🙏 Depois é só clicar aqui embaixo que eu mando.';
-  document.getElementById('pre_link_quick_reply_label').value = 'Já segui!';
-  updatePreview();
-});
 
-['welcome_message', 'quick_reply_label', 'link_label', 'pre_link_message', 'pre_link_quick_reply_label'].forEach(id => {
-  document.getElementById(id).addEventListener('input', updatePreview);
-});
-
-function escapeHtml(str) {
-  const d = document.createElement('div');
-  d.innerText = str;
-  return d.innerHTML;
+  (a.public_replies || []).forEach(v => variants.push(v));
+  renderVariants();
+  renderFlow();
+  markMediaSelected(a.target_media_id);
 }
 
 document.getElementById('form').addEventListener('submit', async (e) => {
@@ -406,6 +418,7 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_story_reply = form.trigger_story_reply.checked;
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
+  data.steps = steps;
 
   const status = document.getElementById('status');
   status.className = '';
@@ -433,7 +446,6 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   if (!session) return;
   await loadMedia();
   await loadForEdit();
-  updatePreview();
 })();
 </script>
 </body>

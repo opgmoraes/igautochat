@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
     .map((k: string) => k.trim())
     .filter(Boolean);
 
+  // steps vem do formulário como um array já pronto: [{type:'message',...}, ..., {type:'link',...}]
+  const steps = Array.isArray(body.steps) ? body.steps : [];
+
   const { data: auto, error } = await db
     .from("automations")
     .insert({
@@ -42,12 +45,7 @@ export async function POST(req: NextRequest) {
       target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,
-      welcome_message: body.welcome_message || "",
-      quick_reply_label: body.quick_reply_label || "Quero!",
-      pre_link_message: body.pre_link_message || null,
-      pre_link_quick_reply_label: body.pre_link_quick_reply_label || "Já segui!",
-      link_label: body.link_label || "Acessar",
-      link_url: body.link_url || "",
+      steps,
       reminder_text: body.reminder_text || null,
       reminder_delay_minutes: Number(body.reminder_delay_minutes || 60),
     })
@@ -55,13 +53,6 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-  await db.from("followups").insert([
-    { automation_id: auto.id, step: 1, kind: "link", delay_minutes: 0 },
-    ...(auto.reminder_text
-      ? [{ automation_id: auto.id, step: 2, kind: "reminder", delay_minutes: auto.reminder_delay_minutes }]
-      : []),
-  ]);
 
   return NextResponse.json({ automation: auto });
 }

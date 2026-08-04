@@ -59,30 +59,32 @@ export async function POST(req: NextRequest) {
     try {
       if (item.kind === "public_reply") {
         await publicReply(item.recipient_value, config.access_token, item.payload.text);
-      } else if (item.kind === "private_reply" || item.kind === "dm") {
-        // Primeiro contato: convite com botão de resposta rápida (sem o link ainda).
-        // Se a automação tiver etapa de pré-link (ex: pedir follow), o botão leva pra lá;
-        // senão, vai direto pra etapa final.
-        const nextStep = item.payload.pre_link_message ? "STEP_PRELINK" : "STEP_LINK";
-        const message = buildQuickReplyMessage(
-          item.payload.welcome_message,
-          item.payload.quick_reply_label,
-          nextStep
-        );
-        await sendMessage({
-          igUserId: config.ig_user_id,
-          token: config.access_token,
-          recipientType: item.recipient_type as "comment_id" | "id",
-          recipientValue: item.recipient_value,
-          message,
-        });
-      } else if (item.kind === "prelink") {
-        // Etapa intermediária do funil (ex: "segue lá antes")
-        const message = buildQuickReplyMessage(
-          item.payload.text,
-          item.payload.button_label,
-          item.payload.next_payload || "STEP_LINK"
-        );
+      } else if (item.kind === "flow_step") {
+        // Busca a automação pra pegar a etapa certa do fluxo (fonte da verdade, evita
+        // duplicar texto na fila e continua correto mesmo se a automação for editada)
+        const { data: auto } = await db
+          .from("automations")
+          .select("steps")
+          .eq("id", item.automation_id)
+          .single();
+        const step = auto?.steps?.[item.payload.step_index];
+        if (!step) {
+          await db.from("queue").update({ status: "skipped", error: "etapa não existe mais" }).eq("id", item.id);
+          skipped++;
+          await new Promise((r) => setTimeout(r, DELAY_MS));
+          continue;
+        }
+
+        const message =
+          step.type === "link"
+            ? buildLinkMessage({
+                welcome_message: step.text,
+                link_label: step.link_label,
+                link_url: step.link_url,
+                quick_reply_label: "",
+              })
+            : buildQuickReplyMessage(step.text, step.button_label, `STEP_${item.payload.step_index + 1}`);
+
         await sendMessage({
           igUserId: config.ig_user_id,
           token: config.access_token,
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
           message,
         });
       } else {
-        // Followups (link / reminder): aqui sim vai o link de verdade
+        // Lembrete: reenvia o link junto com o texto de lembrete
         const message = buildLinkMessage(item.payload as any);
         await sendMessage({
           igUserId: config.ig_user_id,

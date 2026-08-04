@@ -21,14 +21,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const raw = await req.text();
 
-  // Valida a assinatura (HMAC-SHA256 do corpo cru com o app secret)
   const signature = req.headers.get("x-hub-signature-256") || "";
   const expected =
     "sha256=" +
-    crypto
-      .createHmac("sha256", process.env.IG_APP_SECRET!)
-      .update(raw)
-      .digest("hex");
+    crypto.createHmac("sha256", process.env.IG_APP_SECRET!).update(raw).digest("hex");
   if (
     signature.length !== expected.length ||
     !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
@@ -40,21 +36,18 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
 
   for (const entry of body.entry || []) {
-    // --- Comentários ---
     for (const change of entry.changes || []) {
       if (change.field === "comments") {
         await db.from("events").insert({ kind: "comment", raw: change.value });
         await handleComment(db, change.value);
       }
     }
-    // --- Mensagens (DM, resposta de story, resposta ao botão) ---
     for (const msg of entry.messaging || []) {
       await db.from("events").insert({ kind: "message", raw: msg });
       await handleMessage(db, msg);
     }
   }
 
-  // Dispara a drenagem da fila em background, sem atrasar a resposta ao webhook
   after(async () => {
     try {
       await fetch(`${process.env.APP_URL}/api/cron/drain`, {
@@ -69,11 +62,17 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+// Etapas do fluxo: array de { type: 'message', text, button_label } (0 ou mais)
+// terminando sempre em 1 etapa { type: 'link', text, link_label, link_url }.
+function firstStep(steps: any[]) {
+  return steps?.[0] || null;
+}
+
 async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
   const commentId = value.id;
   const mediaId = value.media?.id;
   const text = value.text || "";
-  if (value.from?.id && process.env.IG_USER_ID && value.from.id === process.env.IG_USER_ID) return; // ignora comentário próprio
+  if (value.from?.id && process.env.IG_USER_ID && value.from.id === process.env.IG_USER_ID) return;
 
   const { data: autos } = await db
     .from("automations")
@@ -82,7 +81,6 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
     .eq("trigger_comment", true);
 
   // Se alguma automação usa "meu próximo post", busca o post mais recente 1x só
-  // (assim funciona pra posts agendados: quando publicam, viram o post mais novo automaticamente)
   let latestMediaId: string | null | undefined;
   const needsLatest = (autos || []).some((a) => a.target_mode === "latest");
   if (needsLatest) {
@@ -102,7 +100,6 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
     if (auto.target_mode === "latest" && latestMediaId && latestMediaId !== mediaId) continue;
     if (!matches(auto.keywords, auto.match_type, text)) continue;
 
-    // upsert do contato
     const igScopedId = value.from?.id;
     if (!igScopedId) continue;
     const { data: contact } = await db
@@ -114,28 +111,23 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
       .select()
       .single();
 
-    // Resposta privada — fura a janela de 24h, 1x por comentário, até 7 dias
-    await db.from("queue").insert({
-      contact_id: contact.id,
-      automation_id: auto.id,
-      kind: "private_reply",
-      recipient_type: "comment_id",
-      recipient_value: commentId,
-      needs_24h_window: false,
-      payload: {
-        welcome_message: auto.welcome_message,
-        link_label: auto.link_label,
-        link_url: auto.link_url,
-        quick_reply_label: auto.quick_reply_label,
-        pre_link_message: auto.pre_link_message,
-        pre_link_quick_reply_label: auto.pre_link_quick_reply_label,
-      },
-    });
+    const step0 = firstStep(auto.steps);
+    if (step0) {
+      // Resposta privada — fura a janela de 24h, 1x por comentário, até 7 dias
+      await db.from("queue").insert({
+        contact_id: contact.id,
+        automation_id: auto.id,
+        kind: "flow_step",
+        recipient_type: "comment_id",
+        recipient_value: commentId,
+        needs_24h_window: false,
+        payload: { step_index: 0 },
+      });
+    }
 
     // Resposta pública opcional (sorteia entre variações)
     if (auto.public_replies?.length) {
-      const pick =
-        auto.public_replies[Math.floor(Math.random() * auto.public_replies.length)];
+      const pick = auto.public_replies[Math.floor(Math.random() * auto.public_replies.length)];
       await db.from("queue").insert({
         contact_id: contact.id,
         automation_id: auto.id,
@@ -163,10 +155,12 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
     .select()
     .single();
 
-  // Se a pessoa tocou num botão de resposta rápida -> decide a próxima etapa
-  // usando o "payload" que veio junto do clique (não o texto solto, nunca dispara nisso)
+  // Clique num botão de resposta rápida -> avança pra etapa indicada no payload do clique
+  // (nunca reage a texto solto — só a cliques reais, senão reenvia toda hora)
   if (isQuickReplyClick && contact.last_automation_id) {
-    const clickPayload: string = msg.message?.quick_reply?.payload || "STEP_LINK";
+    const clickPayload: string = msg.message?.quick_reply?.payload || "";
+    const match = clickPayload.match(/^STEP_(\d+)$/);
+    const stepIndex = match ? parseInt(match[1], 10) : 0;
 
     const { data: auto } = await db
       .from("automations")
@@ -174,71 +168,50 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
       .eq("id", contact.last_automation_id)
       .single();
 
-    if (!auto) return;
+    if (!auto || !Array.isArray(auto.steps) || !auto.steps[stepIndex]) return;
 
-    // Etapa intermediária do funil (ex: "pede pra seguir antes")
-    if (clickPayload === "STEP_PRELINK") {
-      // evita reenviar se já mandou essa etapa pra esse contato+automação
-      const { data: already } = await db
-        .from("queue")
-        .select("id")
-        .eq("contact_id", contact.id)
-        .eq("automation_id", contact.last_automation_id)
-        .eq("kind", "prelink")
-        .limit(1);
-      if (already && already.length > 0) return;
+    // Evita reenviar a mesma etapa se a Meta reentregar o mesmo evento
+    const { data: already } = await db
+      .from("queue")
+      .select("id, payload")
+      .eq("contact_id", contact.id)
+      .eq("automation_id", contact.last_automation_id)
+      .eq("kind", "flow_step");
+    const alreadySent = (already || []).some((q: any) => q.payload?.step_index === stepIndex);
+    if (alreadySent) return;
 
-      await db.from("queue").insert({
-        contact_id: contact.id,
-        automation_id: contact.last_automation_id,
-        kind: "prelink",
-        recipient_type: "id",
-        recipient_value: senderId,
-        needs_24h_window: false, // conversa está aberta, acabou de responder
-        payload: {
-          text: auto.pre_link_message,
-          button_label: auto.pre_link_quick_reply_label,
-          next_payload: "STEP_LINK",
-        },
-      });
-      return;
-    }
+    const step = auto.steps[stepIndex];
 
-    // Etapa final: manda o link de verdade (+ agenda o lembrete, se configurado)
-    if (clickPayload === "STEP_LINK") {
-      const { data: already } = await db
-        .from("queue")
-        .select("id")
-        .eq("contact_id", contact.id)
-        .eq("automation_id", contact.last_automation_id)
-        .in("kind", ["link", "reminder"])
-        .limit(1);
-      if (already && already.length > 0) return; // já processado, não duplica
+    await db.from("queue").insert({
+      contact_id: contact.id,
+      automation_id: contact.last_automation_id,
+      kind: "flow_step",
+      recipient_type: "id",
+      recipient_value: senderId,
+      needs_24h_window: false, // conversa está aberta, acabou de responder
+      payload: { step_index: stepIndex },
+    });
 
+    // Se essa foi a etapa final (o link), marca resposta e agenda o lembrete opcional
+    if (step.type === "link") {
       await db
         .from("contacts")
         .update({ last_reply_at: new Date().toISOString() })
         .eq("id", contact.id);
 
-      const { data: followups } = await db
-        .from("followups")
-        .select("*")
-        .eq("automation_id", contact.last_automation_id)
-        .order("step");
-
-      for (const f of followups || []) {
+      if (auto.reminder_text) {
         await db.from("queue").insert({
           contact_id: contact.id,
           automation_id: contact.last_automation_id,
-          kind: f.kind === "reminder" ? "reminder" : "link",
+          kind: "reminder",
           recipient_type: "id",
           recipient_value: senderId,
           needs_24h_window: true,
-          send_after: new Date(Date.now() + f.delay_minutes * 60000).toISOString(),
+          send_after: new Date(Date.now() + (auto.reminder_delay_minutes || 60) * 60000).toISOString(),
           payload: {
-            welcome_message: f.kind === "reminder" ? auto.reminder_text : auto.welcome_message,
-            link_label: auto.link_label,
-            link_url: auto.link_url,
+            welcome_message: auto.reminder_text,
+            link_label: step.link_label,
+            link_url: step.link_url,
           },
         });
       }
@@ -246,7 +219,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
     return;
   }
 
-  // Story reply ou DM comum batendo com palavra-chave -> manda boas-vindas direto
+  // Story reply ou DM comum batendo com palavra-chave -> começa o fluxo direto
   const { data: autos } = await db
     .from("automations")
     .select("*")
@@ -255,22 +228,17 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, msg: any) {
 
   for (const auto of autos || []) {
     if (!matches(auto.keywords, auto.match_type, text)) continue;
+    const step0 = firstStep(auto.steps);
+    if (!step0) continue;
     await db.from("contacts").update({ last_automation_id: auto.id }).eq("id", contact.id);
     await db.from("queue").insert({
       contact_id: contact.id,
       automation_id: auto.id,
-      kind: "dm",
+      kind: "flow_step",
       recipient_type: "id",
       recipient_value: senderId,
       needs_24h_window: false, // conversa já está aberta
-      payload: {
-        welcome_message: auto.welcome_message,
-        link_label: auto.link_label,
-        link_url: auto.link_url,
-        quick_reply_label: auto.quick_reply_label,
-        pre_link_message: auto.pre_link_message,
-        pre_link_quick_reply_label: auto.pre_link_quick_reply_label,
-      },
+      payload: { step_index: 0 },
     });
     break;
   }
