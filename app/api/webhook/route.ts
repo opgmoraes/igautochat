@@ -74,6 +74,17 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, value: any) {
   const text = value.text || "";
   if (value.from?.id && process.env.IG_USER_ID && value.from.id === process.env.IG_USER_ID) return;
 
+  // Meta pode reentregar o mesmo evento de comentário (retry de webhook).
+  // Sem essa trava, cada reentrega sorteia e enfileira outra resposta pública/DM
+  // pro mesmo comentário, dando a impressão de que "todas as variações" são enviadas.
+  const { data: already } = await db
+    .from("queue")
+    .select("id")
+    .eq("recipient_type", "comment_id")
+    .eq("recipient_value", commentId)
+    .limit(1);
+  if (already && already.length) return;
+
   const { data: autos } = await db
     .from("automations")
     .select("*")
