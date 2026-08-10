@@ -22,15 +22,15 @@ export async function GET(req: NextRequest) {
     .eq("status", "failed")
     .gte("created_at", since24h);
 
-  const { data: config } = await db
-    .from("config")
+  const { data: accounts } = await db
+    .from("ig_accounts")
     .select("token_expires_at")
-    .eq("id", 1)
-    .single();
+    .order("token_expires_at", { ascending: true })
+    .limit(1);
 
   return NextResponse.json({
     sentWeek: sentWeek || 0,
     failed24h: failed24h || 0,
-    tokenExpiresAt: config?.token_expires_at || null,
+    tokenExpiresAt: accounts?.[0]?.token_expires_at || null,
   });
 }

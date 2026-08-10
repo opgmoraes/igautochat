@@ -48,6 +48,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       trigger_dm: !!body.trigger_dm,
       keywords,
       match_type: body.match_type || "contains",
+      ig_account_id: body.ig_account_id || null,
       target_media_id: body.target_media_id || null,
       target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,

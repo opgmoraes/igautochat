@@ -12,17 +12,12 @@ export async function POST(req: NextRequest) {
   }
 
   const db = supabaseAdmin();
-  const { data: config } = await db.from("config").select("*").eq("id", 1).single();
-  if (!config?.access_token || !config?.ig_user_id) {
-    return NextResponse.json({ ok: false, reason: "Instagram não conectado" });
-  }
-
   const now = new Date().toISOString();
 
-  // Pega itens pendentes, prontos pra enviar, ordenados por criação
+  // Traz o item já com os dados da conta de Instagram correspondente (token/ig_user_id)
   const { data: items } = await db
     .from("queue")
-    .select("*, contacts(*)")
+    .select("*, contacts(*), ig_accounts(*)")
     .eq("status", "pending")
     .lte("send_after", now)
     .order("created_at")
@@ -33,7 +28,13 @@ export async function POST(req: NextRequest) {
   let skipped = 0;
 
   for (const item of items || []) {
-    // Trava atômica: só processa se conseguir passar de pending -> sending
+    const account = item.ig_accounts;
+    if (!account?.access_token || !account?.ig_user_id) {
+      await db.from("queue").update({ status: "failed", error: "conta desconectada" }).eq("id", item.id);
+      failed++;
+      continue;
+    }
+
     const { data: claimed } = await db
       .from("queue")
       .update({ status: "sending", claimed_at: new Date().toISOString() })
@@ -41,9 +42,8 @@ export async function POST(req: NextRequest) {
       .eq("status", "pending")
       .select()
       .single();
-    if (!claimed) continue; // outro processo já pegou
+    if (!claimed) continue;
 
-    // Respeita a janela de 24h quando necessário
     if (item.needs_24h_window) {
       const lastReply = item.contacts?.last_reply_at
         ? new Date(item.contacts.last_reply_at).getTime()
@@ -58,10 +58,8 @@ export async function POST(req: NextRequest) {
 
     try {
       if (item.kind === "public_reply") {
-        await publicReply(item.recipient_value, config.access_token, item.payload.text);
+        await publicReply(item.recipient_value, account.access_token, item.payload.text);
       } else if (item.kind === "flow_step") {
-        // Busca a automação pra pegar a etapa certa do fluxo (fonte da verdade, evita
-        // duplicar texto na fila e continua correto mesmo se a automação for editada)
         const { data: auto } = await db
           .from("automations")
           .select("steps")
@@ -86,18 +84,17 @@ export async function POST(req: NextRequest) {
             : buildQuickReplyMessage(step.text, step.button_label, `STEP_${item.payload.step_index + 1}`);
 
         await sendMessage({
-          igUserId: config.ig_user_id,
-          token: config.access_token,
+          igUserId: account.ig_user_id,
+          token: account.access_token,
           recipientType: item.recipient_type as "comment_id" | "id",
           recipientValue: item.recipient_value,
           message,
         });
       } else {
-        // Lembrete: reenvia o link junto com o texto de lembrete
         const message = buildLinkMessage(item.payload as any);
         await sendMessage({
-          igUserId: config.ig_user_id,
-          token: config.access_token,
+          igUserId: account.ig_user_id,
+          token: account.access_token,
           recipientType: item.recipient_type as "comment_id" | "id",
           recipientValue: item.recipient_value,
           message,

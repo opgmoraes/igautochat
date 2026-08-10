@@ -7,7 +7,10 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
   const db = supabaseAdmin();
-  const { data } = await db.from("automations").select("*").order("created_at", { ascending: false });
+  const { data } = await db
+    .from("automations")
+    .select("*, ig_accounts(label, ig_username, profile_picture_url)")
+    .order("created_at", { ascending: false });
   return NextResponse.json({ automations: data || [] });
 }
 
@@ -41,6 +44,7 @@ export async function POST(req: NextRequest) {
       trigger_dm: !!body.trigger_dm,
       keywords,
       match_type: body.match_type || "contains",
+      ig_account_id: body.ig_account_id || null,
       target_media_id: body.target_media_id || null,
       target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,

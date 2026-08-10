@@ -114,6 +114,13 @@
   <div class="layout">
   <form id="form">
     <div class="field">
+      <label>Conta do Instagram <span class="hint">qual conta essa automação vai usar</span></label>
+      <select name="ig_account_id" id="ig_account_id" required>
+        <option value="">Carregando contas...</option>
+      </select>
+    </div>
+
+    <div class="field">
       <label>Nome da automação</label>
       <input name="name" required placeholder="Ex: Ebook grátis" />
     </div>
@@ -310,6 +317,28 @@ function updatePreview() {
   }).join('');
 }
 
+// ---------- conta do Instagram ----------
+async function loadAccounts() {
+  const select = document.getElementById('ig_account_id');
+  try {
+    const res = await authFetch('/api/accounts');
+    const { accounts } = await res.json();
+    if (!accounts || accounts.length === 0) {
+      select.innerHTML = '<option value="">Nenhuma conta conectada</option>';
+      return;
+    }
+    select.innerHTML = accounts.map(a =>
+      `<option value="${a.id}">${escapeHtml(a.label || a.ig_username)} (@${escapeHtml(a.ig_username)})</option>`
+    ).join('');
+    select.addEventListener('change', () => {
+      document.getElementById('media-grid').innerHTML = '';
+      loadMedia();
+    });
+  } catch (e) {
+    select.innerHTML = '<option value="">Erro ao carregar contas</option>';
+  }
+}
+
 // ---------- alvo do post ----------
 document.querySelectorAll('input[name="target_mode"]').forEach(r => r.addEventListener('change', updateTargetModeUI));
 function updateTargetModeUI() {
@@ -324,11 +353,15 @@ function updateTargetModeUI() {
 
 async function loadMedia() {
   const grid = document.getElementById('media-grid');
+  const accountId = document.getElementById('ig_account_id').value;
+  if (!accountId) {
+    grid.innerHTML = '<div class="media-loading">Escolha uma conta primeiro</div>';
+    return;
+  }
   try {
-    const res = await authFetch('/api/media');
+    const res = await authFetch('/api/media?account_id=' + accountId);
     const { media, error } = await res.json();
-    const loading = grid.querySelector('.media-loading');
-    if (loading) loading.remove();
+    grid.innerHTML = '';
     if (error) {
       grid.innerHTML = `<div class="media-loading">Erro ao buscar posts: ${error}</div>`;
       return;
@@ -386,6 +419,7 @@ async function loadForEdit() {
   if (!res.ok) { renderFlow(); return; }
   const { automation: a } = await res.json();
   const form = document.getElementById('form');
+  if (a.ig_account_id) form.ig_account_id.value = a.ig_account_id;
   form.name.value = a.name || '';
   form.trigger_comment.checked = a.trigger_comment;
   form.trigger_story_reply.checked = a.trigger_story_reply;
@@ -444,8 +478,10 @@ document.getElementById('form').addEventListener('submit', async (e) => {
 (async () => {
   const session = await window.requireAuth();
   if (!session) return;
-  await loadMedia();
+  await loadAccounts();
   await loadForEdit();
+  await loadMedia();
+  markMediaSelected(document.getElementById('target_media_id').value);
 })();
 </script>
 </body>

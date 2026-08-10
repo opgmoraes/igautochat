@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Calendário — Personal Content OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/glass.css" />
+<script src="/auth.js"></script>
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+  .topnav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .topnav .links { display: flex; gap: 4px; font-family: var(--glass-font-mono); font-size: 12px; }
+  .topnav .links a { color: var(--glass-text-muted); text-decoration: none; padding: 7px 12px; border-radius: 7px; }
+  .topnav .links a.current { color: var(--glass-text); background: var(--glass-surface-solid); }
+  .topnav .links a:hover { color: var(--glass-text); }
+  h1 { font-family: var(--glass-font-display); font-size: 26px; font-weight: 600; margin: 0 0 6px; }
+  .sub { color: var(--glass-text-secondary); font-size: 13px; margin: 0 0 24px; }
+
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 780px) { .layout { grid-template-columns: 1fr; } }
+
+  .sidebar { padding: 16px; position: sticky; top: 20px; }
+  .sidebar-title { font-family: var(--glass-font-mono); font-size: 11px; text-transform: uppercase; color: var(--glass-text-secondary); margin: 0 0 12px; }
+  .sidebar .glass-card { padding: 10px 12px; font-size: 13px; }
+  .sidebar-empty { font-family: var(--glass-font-mono); font-size: 11px; color: var(--glass-text-muted); }
+
+  .month-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .month-nav button { background: var(--glass-surface-solid); border: 0.5px solid var(--glass-border); color: var(--glass-text); border-radius: 7px; width: 30px; height: 30px; cursor: pointer; }
+  .month-label { font-family: var(--glass-font-display); font-size: 16px; font-weight: 600; min-width: 160px; }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-dow { font-family: var(--glass-font-mono); font-size: 10px; color: var(--glass-text-muted); text-align: center; padding-bottom: 4px; text-transform: uppercase; }
+  .cal-day {
+    min-height: 90px; padding: 8px; border-radius: 10px; border: 0.5px solid var(--glass-border);
+    background: var(--glass-surface); font-family: var(--glass-font-mono); font-size: 11px; color: var(--glass-text-muted);
+  }
+  .cal-day.other-month { opacity: 0.35; }
+  .cal-day.today { border-color: var(--glass-blue); }
+  .cal-day.drop-target { border-color: var(--glass-blue); box-shadow: 0 0 20px -4px rgba(5,140,215,0.5); }
+  .cal-day-num { margin-bottom: 6px; }
+  .cal-item {
+    background: var(--glass-surface-solid); border: 0.5px solid var(--glass-border); border-radius: 6px;
+    padding: 4px 6px; margin-bottom: 4px; font-family: var(--glass-font-body); font-size: 11px; color: var(--glass-text);
+    cursor: grab;
+  }
+</style>
+</head>
+<body class="glass-app">
+  <div class="wrap">
+    <div class="topnav">
+      <h1 style="margin-bottom:2px">Calendário de Conteúdo</h1>
+      <div class="links">
+        <a href="/dashboard.html">Instagram</a>
+        <a href="/analytics.html">Analytics</a>
+        <a href="/kanban.html">Conteúdo</a>
+        <a href="/calendario.html" class="current">Calendário</a>
+        <a href="#" id="logout-link">Sair</a>
+      </div>
+    </div>
+    <p class="sub">Arraste um card "pronto" da barra lateral pra um dia — isso agenda a postagem.</p>
+
+    <div class="layout">
+      <div class="sidebar glass-surface">
+        <div class="sidebar-title">Prontos, sem data</div>
+        <div id="unscheduled-list"></div>
+      </div>
+
+      <div>
+        <div class="month-nav">
+          <button id="prev-month">‹</button>
+          <span class="month-label" id="month-label"></span>
+          <button id="next-month">›</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let items = [];
+let current = new Date();
+current.setDate(1);
+
+async function loadItems() {
+  const res = await authFetch('/api/content');
+  const data = await res.json();
+  items = data.items || [];
+  renderSidebar();
+  renderCalendar();
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.innerText = str || '';
+  return d.innerHTML;
+}
+
+function renderSidebar() {
+  const list = items.filter(i => i.status === 'pronto' && !i.post_date);
+  const el = document.getElementById('unscheduled-list');
+  if (list.length === 0) {
+    el.innerHTML = '<div class="sidebar-empty">Nada esperando data</div>';
+    return;
+  }
+  el.innerHTML = list.map(i => `
+    <div class="glass-card glass-surface glass-glow-green" draggable="true" data-id="${i.id}">
+      <div class="glass-card-title" style="font-size:12.5px;margin:0">${escapeHtml(i.title)}</div>
+    </div>`).join('');
+  el.querySelectorAll('.glass-card').forEach(attachDrag);
+}
+
+function attachDrag(el) {
+  el.addEventListener('dragstart', (e) => {
+    draggingId = el.dataset.id;
+    e.currentTarget.style.opacity = '0.4';
+  });
+  el.addEventListener('dragend', (e) => { e.currentTarget.style.opacity = '1'; draggingId = null; });
+}
+
+let draggingId = null;
+
+function renderCalendar() {
+  const year = current.getFullYear();
+  const month = current.getMonth();
+  document.getElementById('month-label').textContent =
+    current.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  const firstDay = new Date(year, month, 1);
+  const startOffset = firstDay.getDay(); // 0=domingo
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const grid = document.getElementById('cal-grid');
+  const dows = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  let html = dows.map(d => `<div class="cal-dow">${d}</div>`).join('');
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // dias do mês anterior pra preencher a primeira semana
+  for (let i = startOffset - 1; i >= 0; i--) {
+    const dayNum = daysInPrevMonth - i;
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${dayNum}</div></div>`;
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayItems = items.filter(i => i.post_date === dateStr);
+    const isToday = dateStr === todayStr;
+    html += `
+      <div class="cal-day ${isToday ? 'today' : ''}" data-date="${dateStr}">
+        <div class="cal-day-num">${d}</div>
+        ${dayItems.map(i => `<div class="cal-item" draggable="true" data-id="${i.id}">${escapeHtml(i.title)}</div>`).join('')}
+      </div>`;
+  }
+
+  // completa a última semana com dias do próximo mês
+  const totalCells = startOffset + daysInMonth;
+  const remaining = (7 - (totalCells % 7)) % 7;
+  for (let d = 1; d <= remaining; d++) {
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${d}</div></div>`;
+  }
+
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.cal-item').forEach(attachDrag);
+
+  grid.querySelectorAll('.cal-day[data-date]').forEach(cell => {
+    cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('drop-target'); });
+    cell.addEventListener('dragleave', () => cell.classList.remove('drop-target'));
+    cell.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      cell.classList.remove('drop-target');
+      if (!draggingId) return;
+      const item = items.find(i => i.id === draggingId);
+      if (!item) return;
+      item.post_date = cell.dataset.date;
+      renderSidebar();
+      renderCalendar();
+      await authFetch('/api/content/' + draggingId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_date: cell.dataset.date })
+      });
+    });
+  });
+
+  // soltar de volta na barra lateral tira a data
+  document.getElementById('unscheduled-list').addEventListener('dragover', (e) => e.preventDefault());
+  document.getElementById('unscheduled-list').addEventListener('drop', async (e) => {
+    e.preventDefault();
+    if (!draggingId) return;
+    const item = items.find(i => i.id === draggingId);
+    if (!item || !item.post_date) return;
+    item.post_date = null;
+    renderSidebar();
+    renderCalendar();
+    await authFetch('/api/content/' + draggingId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_date: null })
+    });
+  });
+}
+
+document.getElementById('prev-month').addEventListener('click', () => {
+  current.setMonth(current.getMonth() - 1);
+  renderCalendar();
+});
+document.getElementById('next-month').addEventListener('click', () => {
+  current.setMonth(current.getMonth() + 1);
+  renderCalendar();
+});
+
+document.getElementById('logout-link').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const sb = await window.initAuth();
+  await sb.auth.signOut();
+  window.location.href = '/login.html';
+});
+
+(async () => {
+  const session = await window.requireAuth();
+  if (!session) return;
+  loadItems();
+})();
+</script>
+</body>
+</html>

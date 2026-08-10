@@ -9,19 +9,27 @@ export async function POST(req: NextRequest) {
   }
 
   const db = supabaseAdmin();
-  const { data: config } = await db.from("config").select("*").eq("id", 1).single();
-  if (!config?.access_token) {
-    return NextResponse.json({ ok: false, reason: "sem token" });
+  const { data: accounts } = await db.from("ig_accounts").select("*");
+
+  let renewed = 0;
+  let failed = 0;
+
+  for (const account of accounts || []) {
+    if (!account.access_token) continue;
+    try {
+      const refreshed = await refreshLongToken(account.access_token);
+      await db
+        .from("ig_accounts")
+        .update({
+          access_token: refreshed.access_token,
+          token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+        })
+        .eq("id", account.id);
+      renewed++;
+    } catch {
+      failed++;
+    }
   }
 
-  const refreshed = await refreshLongToken(config.access_token);
-  await db
-    .from("config")
-    .update({
-      access_token: refreshed.access_token,
-      token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-    })
-    .eq("id", 1);
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, renewed, failed });
 }

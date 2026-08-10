@@ -8,7 +8,7 @@ export function buildLoginUrl(redirectUri: string, state?: string) {
     redirect_uri: redirectUri,
     response_type: "code",
     scope:
-      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish",
+      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights",
   });
   if (state) params.set("state", state);
   return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
@@ -53,7 +53,7 @@ export async function refreshLongToken(longToken: string) {
 
 export async function fetchProfile(token: string) {
   const params = new URLSearchParams({
-    fields: "user_id,username,name,profile_picture_url",
+    fields: "user_id,username,name,profile_picture_url,followers_count,follows_count,media_count",
     access_token: token,
   });
   const res = await fetch(`${GRAPH_BASE}/me?${params}`);
@@ -81,6 +81,36 @@ export async function subscribeApp(igUserId: string, token: string) {
   });
   if (!res.ok) throw new Error(`Falha ao assinar webhooks: ${await res.text()}`);
   return res.json();
+}
+
+// Alcance da conta nos últimos dias (métrica de nível de conta)
+export async function fetchAccountReach(igUserId: string, token: string) {
+  const params = new URLSearchParams({
+    metric: "reach",
+    period: "day",
+    metric_type: "total_value",
+    access_token: token,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${igUserId}/insights?${params}`);
+  if (!res.ok) return null; // conta pode ser pequena demais / sem dado ainda, não trava a tela
+  const json = await res.json();
+  return json.data?.[0]?.total_value?.value ?? null;
+}
+
+// Curtidas, comentários, salvamentos e alcance de um post específico
+export async function fetchMediaInsights(mediaId: string, token: string) {
+  const params = new URLSearchParams({
+    metric: "likes,comments,saved,reach",
+    access_token: token,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${mediaId}/insights?${params}`);
+  if (!res.ok) return null; // nem todo tipo de mídia tem todas as métricas — ignora silenciosamente
+  const json = await res.json();
+  const result: Record<string, number> = {};
+  for (const m of json.data || []) {
+    result[m.name] = m.values?.[0]?.value ?? m.total_value?.value ?? 0;
+  }
+  return result;
 }
 
 type SendPayload =

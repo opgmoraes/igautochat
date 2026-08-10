@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Analytics — Meu ManyChat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+<script src="/auth.js"></script>
+<style>
+  .top-bar { display: flex; justify-content: space-between; align-items: flex-start; }
+  .account-tabs { display: flex; gap: 6px; margin: 20px 0 24px; flex-wrap: wrap; }
+  .account-tab {
+    display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px;
+    border: 0.5px solid var(--border); border-radius: 999px; background: var(--surface);
+    cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .account-tab img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+  .account-tab.active { border-color: var(--accent-blue); background: #EAF6FD; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 28px; }
+  .stat-card { border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 14px 16px; }
+  .stat-card .num { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+  .stat-card .lbl { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+  .posts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .post-card { border: 0.5px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+  .post-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--surface-2); }
+  .post-card .body { padding: 10px 12px; }
+  .post-card .caption { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; max-height: 32px; overflow: hidden; }
+  .post-metrics { display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); flex-wrap: wrap; }
+  .post-metrics span { white-space: nowrap; }
+  .best-badge {
+    display: inline-block; font-family: var(--font-mono); font-size: 10px; background: var(--accent-yellow);
+    color: #3a2b00; padding: 2px 8px; border-radius: 999px; margin-bottom: 6px;
+  }
+  .loading-msg, .empty { padding: 30px 0; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="top-bar">
+    <div>
+      <div class="eyebrow"><span class="dot live"></span> painel · instagram</div>
+      <h1>Analytics</h1>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-start">
+      <a href="/dashboard.html" class="btn small">Automações</a>
+      <a href="/kanban.html" class="btn small">Conteúdo</a>
+      <a href="/calendario.html" class="btn small">Calendário</a>
+      <button class="btn small" id="logout-btn">Sair</button>
+    </div>
+  </div>
+
+  <div class="account-tabs" id="account-tabs"></div>
+  <div id="content"><div class="loading-msg">Carregando contas...</div></div>
+
+<script>
+let accounts = [];
+let currentAccountId = null;
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  const sb = await window.initAuth();
+  await sb.auth.signOut();
+  window.location.href = '/login.html';
+});
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.innerText = str || '';
+  return d.innerHTML;
+}
+
+async function loadAccounts() {
+  const res = await authFetch('/api/accounts');
+  const data = await res.json();
+  accounts = data.accounts || [];
+
+  if (accounts.length === 0) {
+    document.getElementById('content').innerHTML = '<div class="empty">Nenhuma conta conectada ainda.</div>';
+    return;
+  }
+
+  document.getElementById('account-tabs').innerHTML = accounts.map(a => `
+    <div class="account-tab ${a.id === currentAccountId ? 'active' : ''}" data-id="${a.id}">
+      ${a.profile_picture_url ? `<img src="${a.profile_picture_url}" alt="" />` : ''}
+      ${escapeHtml(a.label || a.ig_username)}
+    </div>`).join('');
+
+  document.querySelectorAll('.account-tab').forEach(tab => {
+    tab.addEventListener('click', () => selectAccount(tab.dataset.id));
+  });
+
+  selectAccount(currentAccountId || accounts[0].id);
+}
+
+async function selectAccount(id) {
+  currentAccountId = id;
+  document.querySelectorAll('.account-tab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
+  document.getElementById('content').innerHTML = '<div class="loading-msg">Buscando métricas no Instagram...</div>';
+
+  const res = await authFetch('/api/analytics?account_id=' + id);
+  const data = await res.json();
+
+  if (!res.ok) {
+    document.getElementById('content').innerHTML = `<div class="empty">Não consegui buscar métricas: ${escapeHtml(data.error || 'erro desconhecido')}</div>`;
+    return;
+  }
+
+  renderContent(data);
+}
+
+function renderContent(data) {
+  const stats = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="num">${data.profile.followers_count ?? '—'}</div><div class="lbl">seguidores</div></div>
+      <div class="stat-card"><div class="num">${data.reach ?? '—'}</div><div class="lbl">alcance recente</div></div>
+      <div class="stat-card"><div class="num">${data.avgLikes ?? '—'}</div><div class="lbl">curtidas média/post</div></div>
+      <div class="stat-card"><div class="num">${data.totalComments ?? '—'}</div><div class="lbl">comentários (últimos posts)</div></div>
+    </div>`;
+
+  if (!data.media || data.media.length === 0) {
+    document.getElementById('content').innerHTML = stats + '<div class="empty">Nenhum post encontrado.</div>';
+    return;
+  }
+
+  const posts = data.media.map(m => `
+    <div class="post-card">
+      ${m.thumbnail ? `<img src="${m.thumbnail}" alt="" />` : ''}
+      <div class="body">
+        ${data.best && data.best.id === m.id ? '<span class="best-badge">🏆 melhor post</span><br/>' : ''}
+        ${m.caption ? `<div class="caption">${escapeHtml(m.caption.slice(0, 60))}</div>` : ''}
+        <div class="post-metrics">
+          ${m.likes !== null ? `<span>❤️ ${m.likes}</span>` : ''}
+          ${m.comments !== null ? `<span>💬 ${m.comments}</span>` : ''}
+          ${m.saved !== null ? `<span>🔖 ${m.saved}</span>` : ''}
+          ${m.reach !== null ? `<span>👁 ${m.reach}</span>` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('content').innerHTML = stats + `<div class="posts-grid">${posts}</div>`;
+}
+
+(async () => {
+  const session = await window.requireAuth();
+  if (!session) return;
+  loadAccounts();
+})();
+</script>
+</body>
+</html>

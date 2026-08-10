@@ -40,6 +40,25 @@
   .status-tag.pending, .status-tag.sending { background: var(--surface-2); color: var(--text-muted); }
   .status-tag.skipped { background: var(--surface-2); color: var(--text-muted); }
   .event-time { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+  .accounts-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+  .account-pill {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px;
+    border: 0.5px solid var(--border); border-radius: 999px; background: var(--surface);
+  }
+  .account-pill img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+  .account-pill .avatar-empty { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); }
+  .account-pill .name { font-size: 13px; font-weight: 600; }
+  .account-pill .uname { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .account-pill .rename-btn, .account-pill .disconnect-btn {
+    background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 2px;
+  }
+  .account-pill .disconnect-btn:hover { color: var(--accent-red); }
+  .account-tag {
+    display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px;
+  }
+  .add-account-btn { border-radius: 999px; }
 </style>
 </head>
 <body>
@@ -48,10 +67,15 @@
       <div class="eyebrow"><span id="clock-dot" class="dot off"></span> painel · instagram</div>
       <h1>Central de Sinal</h1>
     </div>
-    <button class="btn small" id="logout-btn">Sair</button>
+    <div style="display:flex;gap:8px;align-items:flex-start">
+      <a href="/analytics.html" class="btn small">Analytics</a>
+      <a href="/kanban.html" class="btn small">Conteúdo</a>
+      <a href="/calendario.html" class="btn small">Calendário</a>
+      <button class="btn small" id="logout-btn">Sair</button>
+    </div>
   </div>
 
-  <div id="connection-box"></div>
+  <div class="accounts-strip" id="accounts-strip"></div>
   <div id="alerts"></div>
   <div class="stats-strip" id="stats-strip"></div>
 
@@ -74,38 +98,44 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   window.location.href = '/login.html';
 });
 
-async function loadConfig() {
-  const res = await authFetch('/api/config');
-  const { config } = await res.json();
-  const box = document.getElementById('connection-box');
+async function loadAccounts() {
+  const res = await authFetch('/api/accounts');
+  const { accounts } = await res.json();
+  const strip = document.getElementById('accounts-strip');
   const clockDot = document.getElementById('clock-dot');
 
-  if (!config || !config.access_token) {
-    clockDot.className = 'dot off';
-    box.innerHTML = `
-      <div class="status-strip">
-        <div class="left">
-          <span class="dot off"></span>
-          <div>
-            <div class="label">Instagram <b>desconectado</b></div>
-            <div class="sub">Conecte sua conta pra começar a escutar comentários e DMs</div>
-          </div>
-        </div>
-        <a href="/api/oauth/start" class="btn primary">Conectar</a>
-      </div>`;
-  } else {
-    clockDot.className = 'dot live';
-    box.innerHTML = `
-      <div class="status-strip">
-        <div class="left">
-          <span class="dot live"></span>
-          <div>
-            <div class="label">Conectado como <b>@${config.ig_username}</b></div>
-            <div class="sub">Escutando comentários, stories e DMs em tempo real</div>
-          </div>
-        </div>
-      </div>`;
-  }
+  clockDot.className = (accounts && accounts.length) ? 'dot live' : 'dot off';
+
+  const pills = (accounts || []).map(acc => `
+    <div class="account-pill">
+      ${acc.profile_picture_url ? `<img src="${acc.profile_picture_url}" alt="" />` : '<div class="avatar-empty"></div>'}
+      <div>
+        <div class="name">${escapeHtml(acc.label || acc.ig_username)}</div>
+        <div class="uname">@${escapeHtml(acc.ig_username)}</div>
+      </div>
+      <button class="rename-btn" onclick="renameAccount('${acc.id}', '${escapeHtml(acc.label || acc.ig_username)}')" title="Renomear">✎</button>
+      <button class="disconnect-btn" onclick="disconnectAccount('${acc.id}')" title="Desconectar">&times;</button>
+    </div>`).join('');
+
+  strip.innerHTML = pills + `<a href="/api/oauth/start" class="btn small add-account-btn primary">+ Conectar outra conta</a>`;
+}
+
+async function renameAccount(id, current) {
+  const label = prompt('Nome dessa conta:', current);
+  if (!label || label === current) return;
+  await authFetch('/api/accounts/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label })
+  });
+  loadAccounts();
+}
+
+async function disconnectAccount(id) {
+  if (!confirm('Desconectar essa conta? As automações dela ficam pausadas até você reconectar.')) return;
+  await authFetch('/api/accounts/' + id, { method: 'DELETE' });
+  loadAccounts();
+  loadAutomations();
 }
 
 async function loadStats() {
@@ -193,6 +223,10 @@ async function loadAutomations() {
       ? `<img src="${a.target_media_thumb}" alt="" class="auto-thumb" />`
       : `<div class="auto-thumb auto-thumb-empty"></div>`;
 
+    const accountTag = a.ig_accounts
+      ? `<div class="account-tag">📸 ${escapeHtml(a.ig_accounts.label || a.ig_accounts.ig_username)}</div>`
+      : `<div class="account-tag" style="color:var(--accent-red)">⚠ sem conta conectada</div>`;
+
     return `
       <div class="signal-row">
         ${thumb}
@@ -204,6 +238,7 @@ async function loadAutomations() {
           </div>
           <div class="meta">Gatilhos: ${gatilhos}</div>
           <div class="chips">${keywords}</div>
+          ${accountTag}
           <div class="actions">
             <a href="/new-automation.html?id=${a.id}" class="btn small">Editar</a>
             <button class="btn small" onclick="toggleAutomation('${a.id}', ${!a.active})">${a.active ? 'Pausar' : 'Ativar'}</button>
@@ -251,7 +286,7 @@ function escapeHtml(str) {
 (async () => {
   const session = await window.requireAuth();
   if (!session) return; // já foi redirecionado pro login
-  loadConfig();
+  loadAccounts();
   loadStats();
   loadAutomations();
   loadEvents();

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kanban — Personal Content OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/glass.css" />
+<script src="/auth.js"></script>
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+  .topnav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .topnav .links { display: flex; gap: 4px; font-family: var(--glass-font-mono); font-size: 12px; }
+  .topnav .links a {
+    color: var(--glass-text-muted); text-decoration: none; padding: 7px 12px; border-radius: 7px;
+  }
+  .topnav .links a.current { color: var(--glass-text); background: var(--glass-surface-solid); }
+  .topnav .links a:hover { color: var(--glass-text); }
+  h1 { font-family: var(--glass-font-display); font-size: 26px; font-weight: 600; margin: 0 0 6px; }
+  .sub { color: var(--glass-text-secondary); font-size: 13px; margin: 0 0 28px; }
+
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 800px) { .board { grid-template-columns: 1fr; } }
+
+  .col-count { font-family: var(--glass-font-mono); font-size: 11px; color: var(--glass-text-muted); margin-left: auto; }
+  .glass-column-title { justify-content: flex-start; }
+  .add-card-btn { width: 100%; margin-top: 4px; justify-content: center; display: flex; }
+
+  /* --- modal --- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none;
+    align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box { width: 100%; max-width: 440px; padding: 24px; }
+  .modal-box h2 { font-family: var(--glass-font-display); font-size: 18px; margin: 0 0 16px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label { display: block; font-family: var(--glass-font-mono); font-size: 11px; color: var(--glass-text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .modal-field input, .modal-field textarea { width: 100%; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  .card-delete { background: none; border: none; color: var(--glass-text-muted); font-size: 15px; cursor: pointer; float: right; margin-top: -4px; }
+  .card-delete:hover { color: var(--glass-red); }
+  .empty-col { font-family: var(--glass-font-mono); font-size: 12px; color: var(--glass-text-muted); padding: 20px 4px; text-align: center; }
+</style>
+</head>
+<body class="glass-app">
+  <div class="wrap">
+    <div class="topnav">
+      <div>
+        <h1 style="margin-bottom:2px">Kanban de Produção</h1>
+      </div>
+      <div class="links">
+        <a href="/dashboard.html">Instagram</a>
+        <a href="/analytics.html">Analytics</a>
+        <a href="/kanban.html" class="current">Conteúdo</a>
+        <a href="/calendario.html">Calendário</a>
+        <a href="#" id="logout-link">Sair</a>
+      </div>
+    </div>
+    <p class="sub">Arraste os cards entre as colunas conforme o conteúdo avança.</p>
+
+    <div class="board" id="board">
+      <div class="glass-column glass-surface" data-status="ideia">
+        <div class="glass-column-title"><span class="glass-tag yellow">Ideia</span><span class="col-count" id="count-ideia"></span></div>
+        <div class="cards" id="col-ideia"></div>
+        <button class="glass-btn add-card-btn" data-status="ideia">+ Novo card</button>
+      </div>
+      <div class="glass-column glass-surface" data-status="organizando">
+        <div class="glass-column-title"><span class="glass-tag blue">Organizando</span><span class="col-count" id="count-organizando"></span></div>
+        <div class="cards" id="col-organizando"></div>
+        <button class="glass-btn add-card-btn" data-status="organizando">+ Novo card</button>
+      </div>
+      <div class="glass-column glass-surface" data-status="pronto">
+        <div class="glass-column-title"><span class="glass-tag green">Pronto</span><span class="col-count" id="count-pronto"></span></div>
+        <div class="cards" id="col-pronto"></div>
+        <button class="glass-btn add-card-btn" data-status="pronto">+ Novo card</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-box glass-surface">
+      <h2 id="modal-title">Novo card</h2>
+      <form id="card-form">
+        <input type="hidden" id="card-id" />
+        <input type="hidden" id="card-status" />
+        <div class="modal-field">
+          <label>Título</label>
+          <input id="card-title-input" required placeholder="Ex: Vídeo sobre automação de DM" />
+        </div>
+        <div class="modal-field">
+          <label>Anotações / roteiro</label>
+          <textarea id="card-body-input" rows="4" placeholder="Ideias, roteiro, links..."></textarea>
+        </div>
+        <div class="modal-field">
+          <label>Palavra-chave da DM <span style="color:var(--glass-text-muted);text-transform:none">(opcional)</span></label>
+          <input id="card-keyword-input" placeholder="Ex: quero" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="glass-btn" id="modal-cancel">Cancelar</button>
+          <button type="submit" class="glass-btn primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+let items = [];
+
+async function loadItems() {
+  const res = await authFetch('/api/content');
+  const data = await res.json();
+  items = data.items || [];
+  render();
+}
+
+function render() {
+  ['ideia', 'organizando', 'pronto'].forEach(status => {
+    const col = document.getElementById('col-' + status);
+    const list = items.filter(i => i.status === status);
+    document.getElementById('count-' + status).textContent = list.length || '';
+    if (list.length === 0) {
+      col.innerHTML = '<div class="empty-col">Nenhum card ainda</div>';
+      return;
+    }
+    col.innerHTML = list.map(cardHtml).join('');
+    col.querySelectorAll('.glass-card').forEach(el => {
+      el.addEventListener('dragstart', onDragStart);
+      el.addEventListener('dragend', onDragEnd);
+      el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('card-delete')) return;
+        openModal(items.find(i => i.id === el.dataset.id));
+      });
+    });
+  });
+}
+
+function cardHtml(item) {
+  const meta = [];
+  if (item.dm_keyword) meta.push('🔑 ' + escapeHtml(item.dm_keyword));
+  if (item.post_date) meta.push('📅 ' + new Date(item.post_date + 'T12:00:00').toLocaleDateString('pt-BR'));
+  return `
+    <div class="glass-card glass-surface glass-glow-blue" draggable="true" data-id="${item.id}">
+      <button class="card-delete" onclick="deleteCard('${item.id}', event)">&times;</button>
+      <div class="glass-card-title">${escapeHtml(item.title)}</div>
+      ${meta.length ? `<div class="glass-card-meta">${meta.join(' · ')}</div>` : ''}
+    </div>`;
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.innerText = str || '';
+  return d.innerHTML;
+}
+
+// ---------- drag & drop ----------
+let draggingId = null;
+function onDragStart(e) {
+  draggingId = e.currentTarget.dataset.id;
+  e.currentTarget.classList.add('dragging');
+}
+function onDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  draggingId = null;
+}
+document.querySelectorAll('.glass-column').forEach(col => {
+  col.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    col.classList.add('drop-target');
+  });
+  col.addEventListener('dragleave', () => col.classList.remove('drop-target'));
+  col.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    col.classList.remove('drop-target');
+    if (!draggingId) return;
+    const newStatus = col.dataset.status;
+    const item = items.find(i => i.id === draggingId);
+    if (!item || item.status === newStatus) return;
+    item.status = newStatus;
+    render();
+    await authFetch('/api/content/' + draggingId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+  });
+});
+
+// ---------- modal criar/editar ----------
+const overlay = document.getElementById('modal-overlay');
+document.querySelectorAll('.add-card-btn').forEach(btn => {
+  btn.addEventListener('click', () => openModal(null, btn.dataset.status));
+});
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+function openModal(item, defaultStatus) {
+  document.getElementById('modal-title').textContent = item ? 'Editar card' : 'Novo card';
+  document.getElementById('card-id').value = item ? item.id : '';
+  document.getElementById('card-status').value = item ? item.status : (defaultStatus || 'ideia');
+  document.getElementById('card-title-input').value = item ? item.title : '';
+  document.getElementById('card-body-input').value = item ? (item.content_body || '') : '';
+  document.getElementById('card-keyword-input').value = item ? (item.dm_keyword || '') : '';
+  overlay.classList.add('open');
+}
+function closeModal() { overlay.classList.remove('open'); }
+
+document.getElementById('card-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('card-id').value;
+  const payload = {
+    title: document.getElementById('card-title-input').value,
+    content_body: document.getElementById('card-body-input').value,
+    dm_keyword: document.getElementById('card-keyword-input').value,
+    status: document.getElementById('card-status').value,
+  };
+
+  if (id) {
+    await authFetch('/api/content/' + id, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+  } else {
+    await authFetch('/api/content', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+  }
+  closeModal();
+  loadItems();
+});
+
+async function deleteCard(id, e) {
+  e.stopPropagation();
+  if (!confirm('Excluir este card?')) return;
+  await authFetch('/api/content/' + id, { method: 'DELETE' });
+  loadItems();
+}
+
+document.getElementById('logout-link').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const sb = await window.initAuth();
+  await sb.auth.signOut();
+  window.location.href = '/login.html';
+});
+
+(async () => {
+  const session = await window.requireAuth();
+  if (!session) return;
+  loadItems();
+})();
+</script>
+</body>
+</html>

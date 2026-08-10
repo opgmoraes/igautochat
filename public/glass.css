@@ -1,0 +1,127 @@
+/* Personal Content OS — design tokens
+   Dark Glassmorphism / Monochrome Glow.
+   Arquivo separado do style.css (retro claro do painel do Instagram) —
+   os dois convivem no mesmo projeto, cada seção com sua identidade. */
+
+:root {
+  color-scheme: dark only;
+
+  /* fundo */
+  --glass-bg: #09090B;
+
+  /* superfícies (vidro jateado) */
+  --glass-surface: rgba(24, 24, 27, 0.65);
+  --glass-surface-solid: #18181B;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 16px;
+
+  /* texto */
+  --glass-text: #F4F4F5;
+  --glass-text-secondary: #A1A1AA;
+  --glass-text-muted: #71717A;
+
+  /* acentos pastel retro — só em detalhes, tags, badges, hover */
+  --glass-yellow: #FFC567;
+  --glass-pink: #FB7DA8;
+  --glass-red: #FD5A46;
+  --glass-purple: #552CB7;
+  --glass-green: #00995E;
+  --glass-blue: #058CD7;
+
+  /* forma */
+  --glass-radius: 14px;
+  --glass-radius-lg: 18px;
+
+  /* tipografia (mesma família do resto do app) */
+  --glass-font-display: 'Space Grotesk', sans-serif;
+  --glass-font-body: 'Inter', sans-serif;
+  --glass-font-mono: 'JetBrains Mono', monospace;
+}
+
+.glass-app {
+  background: var(--glass-bg);
+  color: var(--glass-text);
+  font-family: var(--glass-font-body);
+  min-height: 100vh;
+  background-image: radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* --- superfície de vidro reutilizável --- */
+.glass-surface {
+  background: var(--glass-surface);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--glass-radius-lg);
+}
+
+/* --- glow neon suave no hover, em vez de sombra dura --- */
+.glass-glow-yellow:hover { box-shadow: 0 0 20px -4px rgba(255, 197, 103, 0.45); }
+.glass-glow-pink:hover   { box-shadow: 0 0 20px -4px rgba(251, 125, 168, 0.45); }
+.glass-glow-red:hover    { box-shadow: 0 0 20px -4px rgba(253, 90, 70, 0.45); }
+.glass-glow-purple:hover { box-shadow: 0 0 20px -4px rgba(85, 44, 183, 0.5); }
+.glass-glow-green:hover  { box-shadow: 0 0 20px -4px rgba(0, 153, 94, 0.45); }
+.glass-glow-blue:hover   { box-shadow: 0 0 20px -4px rgba(5, 140, 215, 0.45); }
+
+/* --- tags de status (acentos pastel) --- */
+.glass-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--glass-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  padding: 3px 9px; border-radius: 999px; border: 0.5px solid var(--glass-border);
+}
+.glass-tag.yellow { color: var(--glass-yellow); background: rgba(255, 197, 103, 0.1); }
+.glass-tag.blue   { color: var(--glass-blue);   background: rgba(5, 140, 215, 0.1); }
+.glass-tag.green  { color: var(--glass-green);  background: rgba(0, 153, 94, 0.12); }
+.glass-tag.pink   { color: var(--glass-pink);   background: rgba(251, 125, 168, 0.1); }
+.glass-tag.red    { color: var(--glass-red);    background: rgba(253, 90, 70, 0.1); }
+.glass-tag.purple { color: var(--glass-purple); background: rgba(85, 44, 183, 0.15); }
+
+/* --- inputs escuros com glow interno no focus --- */
+.glass-app input, .glass-app textarea, .glass-app select {
+  background: rgba(0,0,0,0.4);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--glass-text);
+  font-family: var(--glass-font-body);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+.glass-app input:focus, .glass-app textarea:focus, .glass-app select:focus {
+  outline: none;
+  border-color: var(--glass-blue);
+  box-shadow: inset 0 0 0 1px var(--glass-blue), 0 0 14px -2px rgba(5, 140, 215, 0.4);
+}
+
+/* --- botões --- */
+.glass-btn {
+  font-family: var(--glass-font-body); font-weight: 600; font-size: 13px;
+  padding: 9px 16px; border-radius: 8px; cursor: pointer;
+  background: var(--glass-surface-solid); color: var(--glass-text);
+  border: 0.5px solid var(--glass-border);
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.glass-btn:hover { border-color: rgba(255,255,255,0.2); }
+.glass-btn.primary {
+  background: linear-gradient(135deg, var(--glass-blue), var(--glass-purple));
+  border: none; color: #fff;
+}
+
+/* --- cards arrastáveis --- */
+.glass-card {
+  padding: 14px 16px; cursor: grab; margin-bottom: 10px;
+}
+.glass-card:active { cursor: grabbing; }
+.glass-card.dragging { opacity: 0.4; }
+.glass-card-title { font-family: var(--glass-font-display); font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.glass-card-meta { font-family: var(--glass-font-mono); font-size: 11px; color: var(--glass-text-muted); }
+
+/* --- colunas do kanban / dias do calendário --- */
+.glass-column {
+  padding: 16px; min-height: 200px;
+}
+.glass-column-title {
+  font-family: var(--glass-font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--glass-text-secondary); margin: 0 0 14px; display: flex; align-items: center; gap: 8px;
+}
+.glass-column.drop-target { border-color: var(--glass-blue); box-shadow: 0 0 24px -6px rgba(5,140,215,0.5); }
