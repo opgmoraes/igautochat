@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Analytics — Meu ManyChat</title>
+<title>Analytics — igautochat</title>
+<link rel="icon" type="image/png" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
@@ -17,7 +18,7 @@
     cursor: pointer; font-size: 13px; font-weight: 600;
   }
   .account-tab img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
-  .account-tab.active { border-color: var(--accent-blue); background: #EAF6FD; }
+  .account-tab.active { border-color: var(--accent-blue); background: rgba(5, 140, 215, 0.15); }
 
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 28px; }
   .stat-card { border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 14px 16px; }
@@ -36,6 +37,16 @@
     color: #3a2b00; padding: 2px 8px; border-radius: 999px; margin-bottom: 6px;
   }
   .loading-msg, .empty { padding: 30px 0; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; }
+
+  .funnel-row { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+  .funnel-step { text-align: center; }
+  .funnel-step .n { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+  .funnel-step .l { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+  .funnel-arrow { color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; }
+  .funnel-rate { font-family: var(--font-mono); font-size: 12px; color: var(--accent-green); margin-left: 6px; }
+
+  .posts-head { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 14px; flex-wrap: wrap; gap: 10px; }
+  .posts-head select { width: auto; padding: 8px 10px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -110,7 +121,11 @@ async function selectAccount(id) {
   renderContent(data);
 }
 
+let currentData = null;
+let currentSort = 'likes';
+
 function renderContent(data) {
+  currentData = data;
   const stats = `
     <div class="stats-grid">
       <div class="stat-card"><div class="num">${data.profile.followers_count ?? '—'}</div><div class="lbl">seguidores</div></div>
@@ -119,12 +134,52 @@ function renderContent(data) {
       <div class="stat-card"><div class="num">${data.totalComments ?? '—'}</div><div class="lbl">comentários (últimos posts)</div></div>
     </div>`;
 
+  const f = data.funnel;
+  const funnel = f ? `
+    <div class="row"><h2>Funil da automação</h2></div>
+    <div class="funnel-row">
+      <div class="funnel-step"><div class="n">${f.activeAutomations}</div><div class="l">automações ativas</div></div>
+      <span class="funnel-arrow">→</span>
+      <div class="funnel-step"><div class="n">${f.initiations}</div><div class="l">conversas iniciadas</div></div>
+      <span class="funnel-arrow">→</span>
+      <div class="funnel-step"><div class="n">${f.engaged}</div><div class="l">avançaram no fluxo</div></div>
+      ${f.conversionRate !== null ? `<span class="funnel-rate">${f.conversionRate}% de conversão</span>` : ''}
+    </div>` : '';
+
   if (!data.media || data.media.length === 0) {
-    document.getElementById('content').innerHTML = stats + '<div class="empty">Nenhum post encontrado.</div>';
+    document.getElementById('content').innerHTML = stats + funnel + '<div class="empty">Nenhum post encontrado.</div>';
     return;
   }
 
-  const posts = data.media.map(m => `
+  document.getElementById('content').innerHTML = stats + funnel + `
+    <div class="posts-head">
+      <h2 style="font-family:var(--font-display);font-size:17px;margin:0">Posts recentes</h2>
+      <select id="sort-select">
+        <option value="likes">Mais curtidas</option>
+        <option value="comments">Mais comentários</option>
+        <option value="saved">Mais salvamentos</option>
+        <option value="reach">Mais alcance</option>
+        <option value="recent">Mais recentes</option>
+      </select>
+    </div>
+    <div class="posts-grid" id="posts-grid"></div>`;
+
+  document.getElementById('sort-select').value = currentSort;
+  document.getElementById('sort-select').addEventListener('change', (e) => {
+    currentSort = e.target.value;
+    renderPosts();
+  });
+  renderPosts();
+}
+
+function renderPosts() {
+  const data = currentData;
+  const sorted = [...data.media].sort((a, b) => {
+    if (currentSort === 'recent') return new Date(b.timestamp) - new Date(a.timestamp);
+    return (b[currentSort] || 0) - (a[currentSort] || 0);
+  });
+
+  document.getElementById('posts-grid').innerHTML = sorted.map(m => `
     <div class="post-card">
       ${m.thumbnail ? `<img src="${m.thumbnail}" alt="" />` : ''}
       <div class="body">
@@ -138,8 +193,6 @@ function renderContent(data) {
         </div>
       </div>
     </div>`).join('');
-
-  document.getElementById('content').innerHTML = stats + `<div class="posts-grid">${posts}</div>`;
 }
 
 (async () => {

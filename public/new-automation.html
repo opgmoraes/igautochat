@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nova automação — Meu ManyChat</title>
+<title>Nova automação — igautochat</title>
+<link rel="icon" type="image/png" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
@@ -21,7 +22,7 @@
     position: relative; border: 0.5px solid var(--border); border-radius: var(--radius-lg);
     background: var(--surface); padding: 16px 18px; margin-bottom: 4px;
   }
-  .step-card.link-step { border-color: var(--accent-green); border-width: 1.5px; background: #F3FBF7; }
+  .step-card.link-step { border-color: var(--accent-green); border-width: 1.5px; background: rgba(0, 153, 94, 0.08); }
   .step-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .step-badge {
     display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono);
@@ -230,20 +231,32 @@ function escapeHtml(str) {
 function renderFlow() {
   const list = document.getElementById('flow-list');
   list.innerHTML = steps.map((s, i) => {
-    const isLink = s.type === 'link';
+    const isLink = s.type === 'link' || s.type === 'final_message';
     const badgeLabel = isLink ? 'etapa final · link' : `mensagem ${i + 1}`;
     const removeBtn = isLink ? '' : `<button type="button" class="step-remove" onclick="removeStep(${i})">&times;</button>`;
 
     if (isLink) {
+      const isFinalMessage = s.type === 'final_message';
       return `
         <div class="step-card link-step">
           <div class="step-top">
             <span class="step-badge"><span class="num">${i + 1}</span> ${badgeLabel}</span>
           </div>
-          <div class="field" style="margin-bottom:8px">
-            <label>Texto que acompanha o link</label>
-            <textarea rows="2" placeholder="Aqui está! 👇" oninput="updateStep(${i}, 'text', this.value)">${escapeHtml(s.text)}</textarea>
+          <div class="check-row" style="margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="radio" name="final-type-${i}" ${!isFinalMessage ? 'checked' : ''} onchange="setFinalType(${i}, 'link')" /> Manda um link
+            </label>
           </div>
+          <div class="check-row" style="margin-bottom:12px;margin-left:0">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+              <input type="radio" name="final-type-${i}" ${isFinalMessage ? 'checked' : ''} onchange="setFinalType(${i}, 'final_message')" /> Só uma mensagem (sem link)
+            </label>
+          </div>
+          <div class="field" style="margin-bottom:8px">
+            <label>${isFinalMessage ? 'Texto final' : 'Texto que acompanha o link'}</label>
+            <textarea rows="3" placeholder="${isFinalMessage ? 'Ex: lista de filmes, informações, etc.' : 'Aqui está! 👇'}" oninput="updateStep(${i}, 'text', this.value)">${escapeHtml(s.text)}</textarea>
+          </div>
+          ${isFinalMessage ? '' : `
           <div class="step-row">
             <div class="grow field" style="margin-bottom:0">
               <label>URL do link</label>
@@ -253,7 +266,7 @@ function renderFlow() {
               <label>Rótulo do botão</label>
               <input value="${escapeHtml(s.link_label)}" oninput="updateStep(${i}, 'link_label', this.value)" />
             </div>
-          </div>
+          </div>`}
         </div>`;
     }
 
@@ -280,6 +293,11 @@ function renderFlow() {
 function updateStep(i, field, value) {
   steps[i][field] = value;
   updatePreview();
+}
+
+function setFinalType(i, type) {
+  steps[i].type = type;
+  renderFlow();
 }
 
 function removeStep(i) {
@@ -309,6 +327,9 @@ function updatePreview() {
           <div class="txt">${escapeHtml(s.text) || 'Aqui está!'}</div>
           <div class="cta">${escapeHtml(s.link_label) || 'Acessar'}</div>
         </div>`;
+    }
+    if (s.type === 'final_message') {
+      return `<div class="msg-bubble-in">${escapeHtml(s.text) || '...'}</div>`;
     }
     return `
       <div class="msg-bubble-in">${escapeHtml(s.text) || '...'}</div>

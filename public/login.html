@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Entrar — Meu ManyChat</title>
+<title>Entrar — igautochat</title>
+<link rel="icon" type="image/png" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
@@ -12,7 +13,8 @@
   .login-box {
     width: 100%; max-width: 340px; background: var(--surface);
     border: 0.5px solid var(--border); border-radius: var(--radius-lg);
-    padding: 36px 28px; text-align: center; box-shadow: 3px 3px 0 #000;
+    padding: 36px 28px; text-align: center; box-shadow: 0 0 40px -8px rgba(5,140,215,0.25);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   }
   .login-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 4px 0 6px; }
   .login-sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 22px; }
@@ -22,8 +24,8 @@
 </head>
 <body>
   <div class="login-box">
-    <div class="eyebrow" style="justify-content:center">painel · instagram</div>
-    <div class="login-title">Meu ManyChat</div>
+    <div class="eyebrow" style="justify-content:center"><img src="/logo.png" alt="" style="width:20px;height:20px;border-radius:5px" onerror="this.style.display='none'" /> painel · instagram</div>
+    <div class="login-title">igautochat</div>
     <p class="login-sub">Entre com seu e-mail e senha</p>
     <form id="login-form">
       <input type="email" id="email" placeholder="E-mail" required autofocus />

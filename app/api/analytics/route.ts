@@ -49,6 +49,28 @@ export async function GET(req: NextRequest) {
     const avgLikes = mediaWithInsights.length ? Math.round(totalLikes / mediaWithInsights.length) : 0;
     const best = [...mediaWithInsights].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0] || null;
 
+    // Funil interno: quantas conversas começaram (etapa 0) vs quantas avançaram
+    const { count: initiations } = await db
+      .from("queue")
+      .select("id", { count: "exact", head: true })
+      .eq("ig_account_id", accountId)
+      .eq("kind", "flow_step")
+      .filter("payload->>step_index", "eq", "0");
+
+    const { data: engagedRows } = await db
+      .from("queue")
+      .select("contact_id")
+      .eq("ig_account_id", accountId)
+      .eq("kind", "flow_step")
+      .filter("payload->>step_index", "neq", "0");
+    const engaged = new Set((engagedRows || []).map((r: any) => r.contact_id)).size;
+
+    const { count: automationsCount } = await db
+      .from("automations")
+      .select("id", { count: "exact", head: true })
+      .eq("ig_account_id", accountId)
+      .eq("active", true);
+
     return NextResponse.json({
       profile: {
         username: profile.username,
@@ -62,6 +84,12 @@ export async function GET(req: NextRequest) {
       avgLikes,
       best,
       media: mediaWithInsights,
+      funnel: {
+        activeAutomations: automationsCount || 0,
+        initiations: initiations || 0,
+        engaged,
+        conversionRate: initiations ? Math.round((engaged / initiations) * 100) : null,
+      },
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });

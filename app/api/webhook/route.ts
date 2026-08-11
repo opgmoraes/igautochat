@@ -207,7 +207,9 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
       payload: { step_index: stepIndex },
     });
 
-    if (step.type === "link") {
+    // Etapa final: pode ser um link (com botão) OU só uma mensagem de texto
+    // (ex: lista de filmes, sem precisar de link nenhum)
+    if (step.type === "link" || step.type === "final_message") {
       await db
         .from("contacts")
         .update({ last_reply_at: new Date().toISOString() })

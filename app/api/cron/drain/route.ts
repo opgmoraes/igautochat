@@ -81,6 +81,8 @@ export async function POST(req: NextRequest) {
                 link_url: step.link_url,
                 quick_reply_label: "",
               })
+            : step.type === "final_message"
+            ? { text: step.text || "..." }
             : buildQuickReplyMessage(step.text, step.button_label, `STEP_${item.payload.step_index + 1}`);
 
         await sendMessage({
