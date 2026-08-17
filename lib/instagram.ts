@@ -189,27 +189,13 @@ export function buildQuickReplyMessage(
   text: string,
   buttons: { label: string; payload: string }[]
 ): SendPayload {
-  // A API do Instagram não aceita quick_replies vazio.
-  // Isso pode acontecer quando uma etapa foi criada como
-  // "Mensagem c/ botões", mas ficou sem nenhum botão (como nas etapas finais).
-  // Nesse caso, enviamos a etapa como texto simples em vez de mandar
-  // `quick_replies: []`, que gera: "param message[quick_replies] has too few elements".
-  const quickReplies = (buttons || [])
-    .filter((b) => b?.label?.trim() && b?.payload?.trim())
-    .slice(0, 13)
-    .map((b) => ({
-      content_type: "text",
-      title: b.label.trim().slice(0, 20),
-      payload: b.payload.trim(),
-    }));
-
-  if (quickReplies.length === 0) {
-    return { text: text || "Oi!" };
-  }
-
   return {
     text: text || "Oi!",
-    quick_replies: quickReplies,
+    quick_replies: buttons.slice(0, 13).map((b) => ({
+      content_type: "text",
+      title: (b.label || "Continuar").slice(0, 20),
+      payload: b.payload,
+    })),
   };
 }
 

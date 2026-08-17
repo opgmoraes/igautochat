@@ -580,21 +580,26 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
 
-  // Uma etapa "Mensagem c/ botões" sem botões deve ser tratada como
-  // mensagem final. Assim, o editor não salva uma configuração inválida
-  // que faria a API do Instagram rejeitar quick_replies vazios.
+  // A etapa "message" só pode ser enviada pela API do Instagram quando possui
+  // pelo menos um quick reply. Se não houver botões, ela é uma mensagem final.
+  // Isso evita quick_replies: [] e o erro da Meta "has too few elements".
   data.steps = steps.map(s => {
-    if (s.type === 'message') {
-      const validButtons = (s.buttons || []).filter(b =>
-        (b.label || '').trim() && (b.to || '').trim()
-      );
-      if (validButtons.length === 0) {
-        return { ...s, type: 'final_message', buttons: [] };
-      }
-      return { ...s, buttons: validButtons };
+    const copy = { ...s };
+    if (copy.type === 'message' && (!Array.isArray(copy.buttons) || copy.buttons.length === 0)) {
+      copy.type = 'final_message';
+      delete copy.buttons;
     }
-    return s;
+    return copy;
   });
+
+  const invalidButton = data.steps.find(s =>
+    s.type === 'message' && (!Array.isArray(s.buttons) || s.buttons.length === 0 || s.buttons.some(b => !b.to))
+  );
+  if (invalidButton) {
+    status.className = 'error';
+    status.textContent = 'Existe uma mensagem com botão sem destino. Escolha para qual etapa o botão deve levar.';
+    return;
+  }
 
   const reminderText = document.getElementById('reminder_text').value.trim();
   data.reminder_step = reminderText ? {
