@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
           (b: any) => Boolean(b?.label?.trim()) && Boolean(b?.to?.trim())
         );
 
+        // Cada etapa é independente. Só usamos quick_replies quando existem
+        // botões válidos; sem botões, a etapa é enviada como texto puro.
         const message =
           step.type === "link"
             ? buildLinkMessage({
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
                 link_url: step.link_url,
                 quick_reply_label: "",
               })
-            : step.type === "final_message"
+            : step.type === "final_message" || validButtons.length === 0
             ? { text: step.text || "..." }
             : buildQuickReplyMessage(
                 step.text,

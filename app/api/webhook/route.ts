@@ -205,15 +205,22 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
     const step = auto ? findStep(auto.steps, stepId) : null;
     if (!auto || !step) return;
 
-    // Evita reenviar a mesma etapa se a Meta reentregar o mesmo evento
-    const { data: already } = await db
-      .from("queue")
-      .select("id, payload")
-      .eq("contact_id", contact.id)
-      .eq("automation_id", contact.last_automation_id)
-      .eq("kind", "flow_step");
-    const alreadySent = (already || []).some((q: any) => q.payload?.step_id === stepId);
-    if (alreadySent) return;
+    // Idempotência: só ignora a MESMA mensagem/evento da Meta.
+    // Não podemos bloquear pelo step_id, porque a mesma pessoa pode executar
+    // o mesmo caminho novamente em outro teste/interação. Além disso, uma
+    // tentativa anterior que ficou como failed não pode impedir novas tentativas.
+    const eventId = msg.message?.mid || msg.mid || null;
+    if (eventId) {
+      const { data: duplicateEvent } = await db
+        .from("queue")
+        .select("id")
+        .eq("contact_id", contact.id)
+        .eq("automation_id", contact.last_automation_id)
+        .eq("kind", "flow_step")
+        .filter("payload->>source_event_id", "eq", eventId)
+        .limit(1);
+      if ((duplicateEvent || []).length > 0) return;
+    }
 
     await db.from("queue").insert({
       ig_account_id: account.id,
@@ -223,7 +230,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
       recipient_type: "id",
       recipient_value: senderId,
       needs_24h_window: false,
-      payload: { step_id: stepId },
+      payload: { step_id: stepId, source_event_id: eventId },
     });
 
     // Se essa etapa é terminal (link ou mensagem final), marca resposta e
