@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,
       steps,
-      reminder_text: body.reminder_text || null,
+      reminder_step: body.reminder_step && body.reminder_step.text ? body.reminder_step : null,
       reminder_delay_minutes: Number(body.reminder_delay_minutes || 60),
     })
     .eq("id", id);

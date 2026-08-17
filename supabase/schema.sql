@@ -222,3 +222,16 @@ alter table contacts add constraint contacts_account_scoped_unique unique (ig_ac
 
 -- Fila de envio também precisa saber de qual conta enviar
 alter table queue add column if not exists ig_account_id uuid references ig_accounts(id) on delete cascade;
+
+-- =========================================================
+-- MIGRAÇÃO: fluxo com ramificação (múltiplos botões por etapa)
+-- e lembrete independente do link final
+-- Rode isso no SQL Editor do Supabase (uma vez só)
+-- =========================================================
+alter table automations add column if not exists reminder_step jsonb;
+-- reminder_step guarda: { "text": "...", "link_label": "...", "link_url": "..." }
+-- Se link_url estiver vazio, o lembrete vira só uma mensagem de texto, sem botão.
+
+-- OBS: automações criadas antes dessa mudança têm "steps" no formato antigo
+-- (por índice numérico, um botão só por etapa). Recomendo recriar do zero as
+-- automações de teste que você tiver ativas, pra já usar o formato novo.

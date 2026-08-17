@@ -36,10 +36,8 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
 
   for (const entry of body.entry || []) {
-    // entry.id é o ig_user_id da SUA conta que recebeu o evento — é assim que
-    // sabemos qual conta conectada (Founder, BITTO, etc) esse evento pertence
     const account = await resolveAccount(db, entry.id);
-    if (!account) continue; // evento de uma conta que não temos mais conectada
+    if (!account) continue;
 
     for (const change of entry.changes || []) {
       if (change.field === "comments") {
@@ -75,15 +73,24 @@ async function resolveAccount(db: ReturnType<typeof supabaseAdmin>, igUserId: st
   return data || null;
 }
 
+// Etapas agora têm um "id" próprio (string) em vez de índice numérico — isso é o
+// que permite ramificação: cada botão de uma etapa aponta pro id de outra etapa,
+// então o fluxo pode se abrir em caminhos diferentes (ex: "Cursos" x "Conhecer a BITTO").
+function findStep(steps: any[], id: string) {
+  return (steps || []).find((s: any) => s.id === id) || null;
+}
 function firstStep(steps: any[]) {
   return steps?.[0] || null;
+}
+function isTerminal(step: any) {
+  return step?.type === "link" || step?.type === "final_message";
 }
 
 async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any, value: any) {
   const commentId = value.id;
   const mediaId = value.media?.id;
   const text = value.text || "";
-  if (value.from?.id && value.from.id === account.ig_user_id) return; // ignora comentário próprio
+  if (value.from?.id && value.from.id === account.ig_user_id) return;
 
   const { data: autos } = await db
     .from("automations")
@@ -92,7 +99,6 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any,
     .eq("trigger_comment", true)
     .eq("ig_account_id", account.id);
 
-  // Se alguma automação usa "meu próximo post", busca o post mais recente 1x só
   let latestMediaId: string | null | undefined;
   const needsLatest = (autos || []).some((a) => a.target_mode === "latest");
   if (needsLatest && account.access_token && account.ig_user_id) {
@@ -125,8 +131,8 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any,
       .select()
       .single();
 
-    const step0 = firstStep(auto.steps);
-    if (step0) {
+    const entry = firstStep(auto.steps);
+    if (entry) {
       await db.from("queue").insert({
         ig_account_id: account.id,
         contact_id: contact.id,
@@ -135,7 +141,7 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any,
         recipient_type: "comment_id",
         recipient_value: commentId,
         needs_24h_window: false,
-        payload: { step_index: 0 },
+        payload: { step_id: entry.id },
       });
     }
 
@@ -151,7 +157,7 @@ async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any,
         payload: { text: pick },
       });
     }
-    break; // 1 automação por comentário
+    break;
   }
 }
 
@@ -174,8 +180,9 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
 
   if (isQuickReplyClick && contact.last_automation_id) {
     const clickPayload: string = msg.message?.quick_reply?.payload || "";
-    const match = clickPayload.match(/^STEP_(\d+)$/);
-    const stepIndex = match ? parseInt(match[1], 10) : 0;
+    const match = clickPayload.match(/^STEP_(.+)$/);
+    const stepId = match ? match[1] : null;
+    if (!stepId) return;
 
     const { data: auto } = await db
       .from("automations")
@@ -183,18 +190,18 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
       .eq("id", contact.last_automation_id)
       .single();
 
-    if (!auto || !Array.isArray(auto.steps) || !auto.steps[stepIndex]) return;
+    const step = auto ? findStep(auto.steps, stepId) : null;
+    if (!auto || !step) return;
 
+    // Evita reenviar a mesma etapa se a Meta reentregar o mesmo evento
     const { data: already } = await db
       .from("queue")
       .select("id, payload")
       .eq("contact_id", contact.id)
       .eq("automation_id", contact.last_automation_id)
       .eq("kind", "flow_step");
-    const alreadySent = (already || []).some((q: any) => q.payload?.step_index === stepIndex);
+    const alreadySent = (already || []).some((q: any) => q.payload?.step_id === stepId);
     if (alreadySent) return;
-
-    const step = auto.steps[stepIndex];
 
     await db.from("queue").insert({
       ig_account_id: account.id,
@@ -204,18 +211,19 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
       recipient_type: "id",
       recipient_value: senderId,
       needs_24h_window: false,
-      payload: { step_index: stepIndex },
+      payload: { step_id: stepId },
     });
 
-    // Etapa final: pode ser um link (com botão) OU só uma mensagem de texto
-    // (ex: lista de filmes, sem precisar de link nenhum)
-    if (step.type === "link" || step.type === "final_message") {
+    // Se essa etapa é terminal (link ou mensagem final), marca resposta e
+    // agenda o lembrete — que agora é totalmente independente, com seu próprio
+    // texto e link (pode falar de outro assunto, tipo convidar pra BITTO)
+    if (isTerminal(step)) {
       await db
         .from("contacts")
         .update({ last_reply_at: new Date().toISOString() })
         .eq("id", contact.id);
 
-      if (auto.reminder_text) {
+      if (auto.reminder_step?.text) {
         await db.from("queue").insert({
           ig_account_id: account.id,
           contact_id: contact.id,
@@ -226,9 +234,9 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
           needs_24h_window: true,
           send_after: new Date(Date.now() + (auto.reminder_delay_minutes || 60) * 60000).toISOString(),
           payload: {
-            welcome_message: auto.reminder_text,
-            link_label: step.link_label,
-            link_url: step.link_url,
+            welcome_message: auto.reminder_step.text,
+            link_label: auto.reminder_step.link_label,
+            link_url: auto.reminder_step.link_url,
           },
         });
       }
@@ -245,8 +253,8 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
 
   for (const auto of autos || []) {
     if (!matches(auto.keywords, auto.match_type, text)) continue;
-    const step0 = firstStep(auto.steps);
-    if (!step0) continue;
+    const entry = firstStep(auto.steps);
+    if (!entry) continue;
     await db.from("contacts").update({ last_automation_id: auto.id }).eq("id", contact.id);
     await db.from("queue").insert({
       ig_account_id: account.id,
@@ -256,7 +264,7 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
       recipient_type: "id",
       recipient_value: senderId,
       needs_24h_window: false,
-      payload: { step_index: 0 },
+      payload: { step_id: entry.id },
     });
     break;
   }

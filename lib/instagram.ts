@@ -182,18 +182,20 @@ export function buildLinkMessage(auto: {
   return { text: auto.welcome_message };
 }
 
-// Mensagem de convite com botão de RESPOSTA RÁPIDA (gera evento de volta pro webhook).
-// Usada tanto pro convite inicial quanto pra etapa intermediária do funil (ex: pedir follow).
-export function buildQuickReplyMessage(text: string, buttonLabel: string, payload: string): SendPayload {
+// Mensagem de convite/etapa com um ou mais botões de RESPOSTA RÁPIDA (gera evento
+// de volta pro webhook). Cada botão pode levar pra uma etapa diferente do fluxo —
+// é assim que a ramificação funciona (ex: "Cursos" e "Conhecer a BITTO" no mesmo passo).
+export function buildQuickReplyMessage(
+  text: string,
+  buttons: { label: string; payload: string }[]
+): SendPayload {
   return {
     text: text || "Oi!",
-    quick_replies: [
-      {
-        content_type: "text",
-        title: (buttonLabel || "Continuar").slice(0, 20),
-        payload,
-      },
-    ],
+    quick_replies: buttons.slice(0, 13).map((b) => ({
+      content_type: "text",
+      title: (b.label || "Continuar").slice(0, 20),
+      payload: b.payload,
+    })),
   };
 }
 

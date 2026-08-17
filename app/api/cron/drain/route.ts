@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
           .select("steps")
           .eq("id", item.automation_id)
           .single();
-        const step = auto?.steps?.[item.payload.step_index];
+        const step = (auto?.steps || []).find((s: any) => s.id === item.payload.step_id);
         if (!step) {
           await db.from("queue").update({ status: "skipped", error: "etapa não existe mais" }).eq("id", item.id);
           skipped++;
@@ -83,7 +83,10 @@ export async function POST(req: NextRequest) {
               })
             : step.type === "final_message"
             ? { text: step.text || "..." }
-            : buildQuickReplyMessage(step.text, step.button_label, `STEP_${item.payload.step_index + 1}`);
+            : buildQuickReplyMessage(
+                step.text,
+                (step.buttons || []).map((b: any) => ({ label: b.label, payload: `STEP_${b.to}` }))
+              );
 
         await sendMessage({
           igUserId: account.ig_user_id,
