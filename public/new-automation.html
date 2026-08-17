@@ -579,7 +579,22 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_story_reply = form.trigger_story_reply.checked;
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
-  data.steps = steps;
+
+  // Uma etapa "Mensagem c/ botões" sem botões deve ser tratada como
+  // mensagem final. Assim, o editor não salva uma configuração inválida
+  // que faria a API do Instagram rejeitar quick_replies vazios.
+  data.steps = steps.map(s => {
+    if (s.type === 'message') {
+      const validButtons = (s.buttons || []).filter(b =>
+        (b.label || '').trim() && (b.to || '').trim()
+      );
+      if (validButtons.length === 0) {
+        return { ...s, type: 'final_message', buttons: [] };
+      }
+      return { ...s, buttons: validButtons };
+    }
+    return s;
+  });
 
   const reminderText = document.getElementById('reminder_text').value.trim();
   data.reminder_step = reminderText ? {
