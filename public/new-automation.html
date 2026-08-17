@@ -580,26 +580,23 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
 
-  // A etapa "message" só pode ser enviada pela API do Instagram quando possui
-  // pelo menos um quick reply. Se não houver botões, ela é uma mensagem final.
-  // Isso evita quick_replies: [] e o erro da Meta "has too few elements".
-  data.steps = steps.map(s => {
-    const copy = { ...s };
-    if (copy.type === 'message' && (!Array.isArray(copy.buttons) || copy.buttons.length === 0)) {
-      copy.type = 'final_message';
-      delete copy.buttons;
+  // Etapas sem botões não precisam ser enviadas como "Mensagem c/ botões".
+  // Normaliza para "Só texto final" antes de salvar, evitando quick_replies vazios.
+  steps.forEach(s => {
+    if (s.type === 'message') {
+      const validButtons = (s.buttons || []).filter(b =>
+        b && b.label && b.label.trim() && b.to && b.to.trim()
+      );
+      if (validButtons.length === 0) {
+        s.type = 'final_message';
+        delete s.buttons;
+      } else {
+        s.buttons = validButtons;
+      }
     }
-    return copy;
   });
 
-  const invalidButton = data.steps.find(s =>
-    s.type === 'message' && (!Array.isArray(s.buttons) || s.buttons.length === 0 || s.buttons.some(b => !b.to))
-  );
-  if (invalidButton) {
-    status.className = 'error';
-    status.textContent = 'Existe uma mensagem com botão sem destino. Escolha para qual etapa o botão deve levar.';
-    return;
-  }
+  data.steps = steps;
 
   const reminderText = document.getElementById('reminder_text').value.trim();
   data.reminder_step = reminderText ? {

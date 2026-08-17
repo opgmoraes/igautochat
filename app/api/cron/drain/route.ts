@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        const validButtons = (step.buttons || []).filter(
+          (b: any) => Boolean(b?.label?.trim()) && Boolean(b?.to?.trim())
+        );
+
         const message =
           step.type === "link"
             ? buildLinkMessage({
@@ -85,7 +89,7 @@ export async function POST(req: NextRequest) {
             ? { text: step.text || "..." }
             : buildQuickReplyMessage(
                 step.text,
-                (step.buttons || []).map((b: any) => ({ label: b.label, payload: `STEP_${b.to}` }))
+                validButtons.map((b: any) => ({ label: b.label, payload: `STEP_${b.to}` }))
               );
 
         await sendMessage({

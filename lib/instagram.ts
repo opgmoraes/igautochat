@@ -189,11 +189,21 @@ export function buildQuickReplyMessage(
   text: string,
   buttons: { label: string; payload: string }[]
 ): SendPayload {
+  // A API do Instagram rejeita quick_replies vazio.
+  // Etapas sem botões são tratadas como mensagens simples/finais.
+  const validButtons = (buttons || []).filter(
+    (b) => Boolean(b?.label?.trim()) && Boolean(b?.payload?.trim())
+  );
+
+  if (validButtons.length === 0) {
+    return { text: text || "Oi!" };
+  }
+
   return {
     text: text || "Oi!",
-    quick_replies: buttons.slice(0, 13).map((b) => ({
+    quick_replies: validButtons.slice(0, 13).map((b) => ({
       content_type: "text",
-      title: (b.label || "Continuar").slice(0, 20),
+      title: b.label.slice(0, 20),
       payload: b.payload,
     })),
   };

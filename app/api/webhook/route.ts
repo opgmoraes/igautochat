@@ -83,7 +83,19 @@ function firstStep(steps: any[]) {
   return steps?.[0] || null;
 }
 function isTerminal(step: any) {
-  return step?.type === "link" || step?.type === "final_message";
+  if (!step) return false;
+  if (step.type === "link" || step.type === "final_message") return true;
+
+  // Compatibilidade/segurança: uma etapa marcada como "message" sem
+  // botões válidos é, na prática, uma mensagem final.
+  if (step.type === "message") {
+    const validButtons = (step.buttons || []).filter(
+      (b: any) => Boolean(b?.label?.trim()) && Boolean(b?.to?.trim())
+    );
+    return validButtons.length === 0;
+  }
+
+  return false;
 }
 
 async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any, value: any) {
