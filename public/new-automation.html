@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nova automação — igautochat</title>
-<link rel="icon" type="image/png" href="/logo.png">
+<title>Nova automação — Meu ManyChat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
@@ -17,14 +16,13 @@
   }
 
   /* --- construtor de fluxo --- */
-  .flow-list { display: flex; flex-direction: column; gap: 10px; }
+  .flow-list { display: flex; flex-direction: column; gap: 0; }
   .step-card {
     position: relative; border: 0.5px solid var(--border); border-radius: var(--radius-lg);
-    background: var(--surface); padding: 16px 18px;
+    background: var(--surface); padding: 16px 18px; margin-bottom: 4px;
   }
-  .step-card.terminal { border-color: var(--accent-green); border-width: 1.5px; background: rgba(0, 153, 94, 0.08); }
-  .step-card.orphan { border-color: var(--accent-yellow); border-style: dashed; }
-  .step-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
+  .step-card.link-step { border-color: var(--accent-green); border-width: 1.5px; background: #F3FBF7; }
+  .step-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .step-badge {
     display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono);
     font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
@@ -32,34 +30,23 @@
   .step-badge .num {
     width: 20px; height: 20px; border-radius: 50%; background: var(--surface-2);
     display: inline-flex; align-items: center; justify-content: center; color: var(--text-primary);
-    font-weight: 700; font-size: 11px; flex-shrink: 0;
+    font-weight: 700; font-size: 11px;
   }
-  .terminal .step-badge .num { background: var(--accent-green); color: #fff; }
-  .entry-tag { font-size: 10px; background: var(--accent-blue); color: #fff; padding: 2px 8px; border-radius: 999px; }
-  .orphan-tag { font-size: 10px; background: var(--accent-yellow); color: #3a2b00; padding: 2px 8px; border-radius: 999px; }
+  .link-step .step-badge .num { background: var(--accent-green); color: #fff; }
   .step-remove {
-    background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 4px; margin-left: auto;
+    background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 4px;
   }
   .step-remove:hover { color: var(--accent-red); }
-  .step-row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .step-row .grow { flex: 1; min-width: 160px; }
-  .step-row .btn-field { width: 130px; flex-shrink: 0; }
-  .add-step-btn { width: 100%; margin: 4px 0; justify-content: center; border-style: dashed; }
-
-  .type-switch { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-  .type-switch label {
-    font-size: 12px; font-family: var(--font-mono); padding: 6px 10px; border-radius: 999px;
-    border: 0.5px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 5px;
+  .step-connector {
+    display: flex; align-items: center; justify-content: center; padding: 6px 0;
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);
   }
-  .type-switch input { width: auto; margin: 0; }
-
-  .buttons-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-  .button-row { display: flex; gap: 8px; align-items: center; }
-  .button-row input { flex: 1; min-width: 90px; }
-  .button-row select { flex: 1.2; min-width: 120px; font-size: 13px; }
-  .button-row .rm { background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; flex-shrink: 0; }
-  .button-row .rm:hover { color: var(--accent-red); }
-  .add-button-btn { margin-top: 4px; font-size: 12.5px; padding: 6px 12px; }
+  .step-connector::before, .step-connector::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .step-connector span { padding: 0 10px; white-space: nowrap; }
+  .step-row { display: flex; gap: 10px; }
+  .step-row .grow { flex: 1; }
+  .step-row .btn-field { width: 130px; flex-shrink: 0; }
+  .add-step-btn { width: 100%; margin: 10px 0 4px; justify-content: center; border-style: dashed; }
 
   /* --- grade de posts --- */
   .media-grid {
@@ -105,20 +92,18 @@
     background: var(--surface-2); padding: 10px 14px; font-family: var(--font-mono);
     font-size: 10px; color: var(--text-muted); text-align: center; border-bottom: 0.5px solid var(--border);
   }
-  .phone-screen { padding: 18px 14px; min-height: 200px; max-height: 560px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #efeee9; }
+  .phone-screen { padding: 18px 14px; min-height: 200px; max-height: 560px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #efeee9; }
   .msg-bubble-in {
     align-self: flex-start; max-width: 88%; background: #fff; border: 0.5px solid var(--border);
-    border-radius: 14px 14px 14px 3px; padding: 10px 13px; font-size: 13px; line-height: 1.45;
-    white-space: pre-wrap; word-break: break-word;
+    border-radius: 14px 14px 14px 3px; padding: 10px 13px; font-size: 13px; line-height: 1.4;
   }
   .qr-row { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 2px; }
   .qr-btn { font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 999px; border: 1.5px solid var(--accent-blue); color: var(--accent-blue); background: #fff; }
   .link-btn { align-self: flex-start; max-width: 88%; background: #fff; border: 0.5px solid var(--border); border-radius: 14px; overflow: hidden; font-size: 13px; }
-  .link-btn .txt { padding: 10px 13px; white-space: pre-wrap; word-break: break-word; }
+  .link-btn .txt { padding: 10px 13px; }
   .link-btn .cta { text-align: center; padding: 10px; font-weight: 600; color: var(--accent-blue); border-top: 0.5px solid var(--border); }
-  .preview-step-label { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+  .preview-tap { align-self: center; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin: 2px 0; }
   .preview-empty { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); text-align: center; padding: 30px 10px; }
-  .preview-note { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); padding: 8px 14px 0; }
 </style>
 </head>
 <body>
@@ -128,13 +113,6 @@
 
   <div class="layout">
   <form id="form">
-    <div class="field">
-      <label>Conta do Instagram <span class="hint">qual conta essa automação vai usar</span></label>
-      <select name="ig_account_id" id="ig_account_id" required>
-        <option value="">Carregando contas...</option>
-      </select>
-    </div>
-
     <div class="field">
       <label>Nome da automação</label>
       <input name="name" required placeholder="Ex: Ebook grátis" />
@@ -171,10 +149,6 @@
       <p id="latest-hint" style="display:none;font-size:12px;color:var(--text-secondary);margin:8px 0 0">
         Assim que você publicar (ou um agendado sair do forno), essa automação passa a valer pra ele automaticamente.
       </p>
-      <p style="font-size:12px;color:var(--text-muted);margin:8px 0 0">
-        Post colaborativo com outra das suas contas? Ele só aparece na lista da conta que publicou —
-        na conta convidada, usa "Qualquer post" como alternativa.
-      </p>
       <div class="media-grid" id="media-grid" style="margin-top:12px;display:none">
         <div class="media-loading">Carregando seus posts...</div>
       </div>
@@ -191,34 +165,20 @@
     </div>
 
     <div class="field" style="margin-top:28px">
-      <label style="font-size:14px;color:var(--text-primary)">Fluxo de mensagens <span class="hint">cada mensagem pode ter vários botões, levando a caminhos diferentes</span></label>
+      <label style="font-size:14px;color:var(--text-primary)">Fluxo de mensagens <span class="hint">na ordem que a pessoa vai receber</span></label>
       <div class="flow-list" id="flow-list"></div>
-      <button type="button" class="btn add-step-btn" id="add-step-btn">+ Adicionar etapa solta</button>
+      <button type="button" class="btn add-step-btn" id="add-step-btn">+ Adicionar mensagem</button>
     </div>
 
     <fieldset style="margin-top:10px">
-      <legend>Lembrete (opcional — independente do fluxo)</legend>
-      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px">
-        Dispara um tempo depois que a pessoa chegar numa etapa final. Pode falar de outro assunto
-        e ter um link diferente — não precisa repetir o mesmo link do fluxo.
-      </p>
+      <legend>Lembrete depois do link (opcional)</legend>
       <div class="field">
         <label>Texto do lembrete</label>
-        <textarea id="reminder_text" rows="2" placeholder="Ex: Vem conhecer também a BITTO 👀"></textarea>
+        <textarea name="reminder_text" id="reminder_text" rows="2" placeholder="Ainda não viu? O link continua aqui"></textarea>
       </div>
-      <div class="step-row">
-        <div class="grow field">
-          <label>URL do link <span class="hint">opcional</span></label>
-          <input id="reminder_link_url" placeholder="https://" />
-        </div>
-        <div class="btn-field field">
-          <label>Rótulo do botão</label>
-          <input id="reminder_link_label" value="Acessar" />
-        </div>
-      </div>
-      <div class="field" style="margin-bottom:0;max-width:200px">
-        <label>Atraso <span class="hint">minutos depois da etapa final</span></label>
-        <input name="reminder_delay_minutes" type="number" value="60" />
+      <div class="field" style="margin-bottom:0">
+        <label>Atraso <span class="hint">minutos depois do link ser enviado</span></label>
+        <input name="reminder_delay_minutes" type="number" value="60" style="max-width:140px" />
       </div>
     </fieldset>
 
@@ -229,7 +189,6 @@
   <aside>
     <div class="phone-preview">
       <div class="phone-bar">prévia da conversa</div>
-      <div class="preview-note">mostra cada etapa isolada — não segue a ramificação</div>
       <div class="phone-screen" id="phone-screen">
         <div class="preview-empty">Adiciona uma mensagem pra ver a prévia aqui</div>
       </div>
@@ -240,6 +199,13 @@
 <script>
 const params = new URLSearchParams(window.location.search);
 const editId = params.get('id');
+let accountId = params.get('account_id') || localStorage.getItem('igautochat_account_id') || null;
+
+if (!editId && !accountId) {
+  document.querySelector('.layout').insertAdjacentHTML('beforebegin',
+    '<div class="banner danger" style="border:1.5px solid #E5484D;background:#FFF0EE;border-radius:12px;padding:12px 16px;font-size:13px;margin-bottom:20px;">' +
+    '⚠️ Nenhuma conta selecionada. <a href="/dashboard.html">Volte pra central</a> e escolha uma conta antes de criar a automação.</div>');
+}
 
 if (editId) {
   document.querySelector('h1').textContent = 'Editar automação';
@@ -248,17 +214,10 @@ if (editId) {
 }
 
 // ---------- estado do fluxo ----------
-let stepCounter = 0;
-function newId() { stepCounter++; return 's' + Date.now().toString(36) + stepCounter; }
-
 let steps = [
-  { id: newId(), type: 'message', text: '', buttons: [] },
+  { type: 'message', text: '', button_label: 'Quero!' },
+  { type: 'link', text: '', link_label: 'Acessar', link_url: '' },
 ];
-steps[0].buttons = [{ id: newId(), label: 'Quero!', to: '' }];
-const linkStep = { id: newId(), type: 'link', text: '', link_label: 'Acessar', link_url: '' };
-steps.push(linkStep);
-steps[0].buttons[0].to = linkStep.id;
-
 const variants = [];
 
 function escapeHtml(str) {
@@ -267,141 +226,74 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-function stepLabel(step, index) {
-  const snippet = (step.text || '').trim().slice(0, 22) || '(vazia)';
-  return `Etapa ${index + 1}: "${snippet}${step.text && step.text.length > 22 ? '…' : ''}"`;
-}
-
-function isConnected(id) {
-  if (steps[0] && steps[0].id === id) return true;
-  return steps.some(s => (s.buttons || []).some(b => b.to === id));
-}
-
 // ---------- construtor de etapas ----------
 function renderFlow() {
   const list = document.getElementById('flow-list');
   list.innerHTML = steps.map((s, i) => {
-    const isTerminal = s.type === 'link' || s.type === 'final_message';
-    const orphan = i !== 0 && !isConnected(s.id);
+    const isLink = s.type === 'link';
+    const badgeLabel = isLink ? 'etapa final · link' : `mensagem ${i + 1}`;
+    const removeBtn = isLink ? '' : `<button type="button" class="step-remove" onclick="removeStep(${i})">&times;</button>`;
 
-    const otherStepsOptions = steps
-      .filter(o => o.id !== s.id)
-      .map((o, oi) => `<option value="${o.id}">${escapeHtml(stepLabel(o, steps.indexOf(o)))}</option>`)
-      .join('');
-
-    const typeSwitch = `
-      <div class="type-switch">
-        <label><input type="radio" name="type-${s.id}" ${s.type === 'message' ? 'checked' : ''} onchange="setStepType('${s.id}', 'message')" /> Mensagem c/ botões</label>
-        <label><input type="radio" name="type-${s.id}" ${s.type === 'link' ? 'checked' : ''} onchange="setStepType('${s.id}', 'link')" /> Manda um link</label>
-        <label><input type="radio" name="type-${s.id}" ${s.type === 'final_message' ? 'checked' : ''} onchange="setStepType('${s.id}', 'final_message')" /> Só texto final</label>
-      </div>`;
-
-    let body = `
-      <div class="field" style="margin-bottom:${s.type === 'message' ? '0' : '8px'}">
-        <label>${s.type === 'link' ? 'Texto que acompanha o link' : s.type === 'final_message' ? 'Texto final' : 'Mensagem'}</label>
-        <textarea rows="3" placeholder="Escreve normalmente, com Enter pra quebrar linha — não precisa de &lt;br&gt;" oninput="updateStepField('${s.id}', 'text', this.value)">${escapeHtml(s.text)}</textarea>
-      </div>`;
-
-    if (s.type === 'link') {
-      body += `
-        <div class="step-row">
-          <div class="grow field" style="margin-bottom:0">
-            <label>URL do link</label>
-            <input placeholder="https://" value="${escapeHtml(s.link_url)}" oninput="updateStepField('${s.id}', 'link_url', this.value)" />
+    if (isLink) {
+      return `
+        <div class="step-card link-step">
+          <div class="step-top">
+            <span class="step-badge"><span class="num">${i + 1}</span> ${badgeLabel}</span>
           </div>
-          <div class="btn-field field" style="margin-bottom:0">
-            <label>Rótulo do botão</label>
-            <input value="${escapeHtml(s.link_label)}" oninput="updateStepField('${s.id}', 'link_label', this.value)" />
+          <div class="field" style="margin-bottom:8px">
+            <label>Texto que acompanha o link</label>
+            <textarea rows="2" placeholder="Aqui está! 👇" oninput="updateStep(${i}, 'text', this.value)">${escapeHtml(s.text)}</textarea>
+          </div>
+          <div class="step-row">
+            <div class="grow field" style="margin-bottom:0">
+              <label>URL do link</label>
+              <input placeholder="https://" value="${escapeHtml(s.link_url)}" oninput="updateStep(${i}, 'link_url', this.value)" />
+            </div>
+            <div class="btn-field field" style="margin-bottom:0">
+              <label>Rótulo do botão</label>
+              <input value="${escapeHtml(s.link_label)}" oninput="updateStep(${i}, 'link_label', this.value)" />
+            </div>
           </div>
         </div>`;
     }
 
-    if (s.type === 'message') {
-      body += `<div class="buttons-list">` + (s.buttons || []).map(b => `
-        <div class="button-row">
-          <input placeholder="Rótulo do botão" value="${escapeHtml(b.label)}" oninput="updateButtonField('${s.id}', '${b.id}', 'label', this.value)" />
-          <select onchange="updateButtonTarget('${s.id}', '${b.id}', this.value)">
-            <option value="">leva para...</option>
-            ${otherStepsOptions.replace(`value="${b.to}"`, `value="${b.to}" selected`)}
-            <option value="__new__">+ Nova etapa</option>
-          </select>
-          <button type="button" class="rm" onclick="removeButton('${s.id}', '${b.id}')">&times;</button>
-        </div>`).join('') + `</div>
-        <button type="button" class="btn small add-button-btn" onclick="addButton('${s.id}')">+ Adicionar botão</button>`;
-    }
-
     return `
-      <div class="step-card ${isTerminal ? 'terminal' : ''} ${orphan ? 'orphan' : ''}">
+      <div class="step-card">
         <div class="step-top">
-          <span class="step-badge"><span class="num">${i + 1}</span> ${isTerminal ? 'etapa final' : 'mensagem'}</span>
-          ${i === 0 ? '<span class="entry-tag">início do fluxo</span>' : ''}
-          ${orphan ? '<span class="orphan-tag">nenhum botão leva aqui ainda</span>' : ''}
-          ${i !== 0 ? `<button type="button" class="step-remove" onclick="removeStep('${s.id}')">&times;</button>` : ''}
+          <span class="step-badge"><span class="num">${i + 1}</span> ${badgeLabel}</span>
+          ${removeBtn}
         </div>
-        ${typeSwitch}
-        ${body}
-      </div>`;
+        <div class="field" style="margin-bottom:8px">
+          <label>Mensagem</label>
+          <textarea rows="2" placeholder="Oi! Toca no botão pra continuar" oninput="updateStep(${i}, 'text', this.value)">${escapeHtml(s.text)}</textarea>
+        </div>
+        <div class="field" style="margin-bottom:0;max-width:200px">
+          <label>Rótulo do botão</label>
+          <input value="${escapeHtml(s.button_label)}" oninput="updateStep(${i}, 'button_label', this.value)" />
+        </div>
+      </div>
+      <div class="step-connector"><span>clique</span></div>`;
   }).join('');
   updatePreview();
 }
 
-function updateStepField(id, field, value) {
-  const s = steps.find(x => x.id === id);
-  s[field] = value;
+function updateStep(i, field, value) {
+  steps[i][field] = value;
   updatePreview();
 }
 
-function setStepType(id, type) {
-  const s = steps.find(x => x.id === id);
-  s.type = type;
-  if (type === 'message' && !s.buttons) s.buttons = [];
-  renderFlow();
-}
-
-function addButton(stepId) {
-  const s = steps.find(x => x.id === stepId);
-  s.buttons.push({ id: newId(), label: '', to: '' });
-  renderFlow();
-}
-function removeButton(stepId, buttonId) {
-  const s = steps.find(x => x.id === stepId);
-  s.buttons = s.buttons.filter(b => b.id !== buttonId);
-  renderFlow();
-}
-function updateButtonField(stepId, buttonId, field, value) {
-  const s = steps.find(x => x.id === stepId);
-  const b = s.buttons.find(x => x.id === buttonId);
-  b[field] = value;
-  updatePreview();
-}
-function updateButtonTarget(stepId, buttonId, value) {
-  const s = steps.find(x => x.id === stepId);
-  const b = s.buttons.find(x => x.id === buttonId);
-  if (value === '__new__') {
-    const ns = { id: newId(), type: 'message', text: '', buttons: [] };
-    steps.push(ns);
-    b.to = ns.id;
-  } else {
-    b.to = value;
-  }
-  renderFlow();
-}
-
-function removeStep(id) {
-  steps = steps.filter(s => s.id !== id);
-  // desconecta qualquer botão que apontava pra etapa removida
-  steps.forEach(s => {
-    (s.buttons || []).forEach(b => { if (b.to === id) b.to = ''; });
-  });
+function removeStep(i) {
+  steps.splice(i, 1);
   renderFlow();
 }
 
 document.getElementById('add-step-btn').addEventListener('click', () => {
-  steps.push({ id: newId(), type: 'message', text: '', buttons: [] });
+  // insere uma nova mensagem logo antes da etapa final (o link)
+  steps.splice(steps.length - 1, 0, { type: 'message', text: '', button_label: 'Continuar' });
   renderFlow();
 });
 
-// ---------- prévia ao vivo (cada etapa isolada) ----------
+// ---------- prévia ao vivo ----------
 function updatePreview() {
   const screen = document.getElementById('phone-screen');
   const hasContent = steps.some(s => s.text && s.text.trim());
@@ -416,40 +308,13 @@ function updatePreview() {
         <div class="link-btn">
           <div class="txt">${escapeHtml(s.text) || 'Aqui está!'}</div>
           <div class="cta">${escapeHtml(s.link_label) || 'Acessar'}</div>
-        </div>
-        <div class="preview-step-label">etapa ${i + 1}</div>`;
+        </div>`;
     }
-    if (s.type === 'final_message') {
-      return `<div class="msg-bubble-in">${escapeHtml(s.text) || '...'}</div><div class="preview-step-label">etapa ${i + 1}</div>`;
-    }
-    const btns = (s.buttons || []).map(b => `<span class="qr-btn">${escapeHtml(b.label) || 'Continuar'}</span>`).join('');
     return `
       <div class="msg-bubble-in">${escapeHtml(s.text) || '...'}</div>
-      <div class="qr-row">${btns}</div>
-      <div class="preview-step-label">etapa ${i + 1}</div>`;
+      <div class="qr-row"><span class="qr-btn">${escapeHtml(s.button_label) || 'Continuar'}</span></div>
+      <div class="preview-tap">↳ pessoa toca no botão</div>`;
   }).join('');
-}
-
-// ---------- conta do Instagram ----------
-async function loadAccounts() {
-  const select = document.getElementById('ig_account_id');
-  try {
-    const res = await authFetch('/api/accounts');
-    const { accounts } = await res.json();
-    if (!accounts || accounts.length === 0) {
-      select.innerHTML = '<option value="">Nenhuma conta conectada</option>';
-      return;
-    }
-    select.innerHTML = accounts.map(a =>
-      `<option value="${a.id}">${escapeHtml(a.label || a.ig_username)} (@${escapeHtml(a.ig_username)})</option>`
-    ).join('');
-    select.addEventListener('change', () => {
-      document.getElementById('media-grid').innerHTML = '';
-      loadMedia();
-    });
-  } catch (e) {
-    select.innerHTML = '<option value="">Erro ao carregar contas</option>';
-  }
 }
 
 // ---------- alvo do post ----------
@@ -466,15 +331,15 @@ function updateTargetModeUI() {
 
 async function loadMedia() {
   const grid = document.getElementById('media-grid');
-  const accountId = document.getElementById('ig_account_id').value;
   if (!accountId) {
-    grid.innerHTML = '<div class="media-loading">Escolha uma conta primeiro</div>';
+    grid.innerHTML = '<div class="media-loading">Selecione uma conta na central pra ver os posts.</div>';
     return;
   }
   try {
     const res = await authFetch('/api/media?account_id=' + accountId);
     const { media, error } = await res.json();
-    grid.innerHTML = '';
+    const loading = grid.querySelector('.media-loading');
+    if (loading) loading.remove();
     if (error) {
       grid.innerHTML = `<div class="media-loading">Erro ao buscar posts: ${error}</div>`;
       return;
@@ -531,17 +396,15 @@ async function loadForEdit() {
   const res = await authFetch('/api/automations/' + editId);
   if (!res.ok) { renderFlow(); return; }
   const { automation: a } = await res.json();
+  accountId = a.account_id || accountId;
   const form = document.getElementById('form');
-  if (a.ig_account_id) form.ig_account_id.value = a.ig_account_id;
   form.name.value = a.name || '';
   form.trigger_comment.checked = a.trigger_comment;
   form.trigger_story_reply.checked = a.trigger_story_reply;
   form.trigger_dm.checked = a.trigger_dm;
   form.keywords.value = (a.keywords || []).join(', ');
   form.match_type.value = a.match_type || 'contains';
-  document.getElementById('reminder_text').value = a.reminder_step?.text || '';
-  document.getElementById('reminder_link_url').value = a.reminder_step?.link_url || '';
-  document.getElementById('reminder_link_label').value = a.reminder_step?.link_label || 'Acessar';
+  form.reminder_text.value = a.reminder_text || '';
   form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
   document.getElementById('target_media_id').value = a.target_media_id || '';
   document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
@@ -549,20 +412,8 @@ async function loadForEdit() {
   if (modeRadio) modeRadio.checked = true;
   updateTargetModeUI();
 
-  if (Array.isArray(a.steps) && a.steps.length > 0 && a.steps[0].id) {
-    // já está no formato novo (com id) — usa direto
+  if (Array.isArray(a.steps) && a.steps.length > 0) {
     steps = a.steps;
-  } else if (Array.isArray(a.steps) && a.steps.length > 0) {
-    // formato antigo (por índice) — converte pro novo formato com id e um botão só
-    const converted = a.steps.map((s, i) => ({
-      id: 'legacy' + i,
-      type: s.type,
-      text: s.text,
-      link_label: s.link_label,
-      link_url: s.link_url,
-      buttons: s.type === 'message' ? [{ id: 'legacyb' + i, label: s.button_label || 'Continuar', to: 'legacy' + (i + 1) }] : undefined,
-    }));
-    steps = converted;
   }
 
   (a.public_replies || []).forEach(v => variants.push(v));
@@ -579,31 +430,15 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_story_reply = form.trigger_story_reply.checked;
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
-
-  // Etapas sem botões não precisam ser enviadas como "Mensagem c/ botões".
-  // Normaliza para "Só texto final" antes de salvar, evitando quick_replies vazios.
-  steps.forEach(s => {
-    if (s.type === 'message') {
-      const validButtons = (s.buttons || []).filter(b =>
-        b && b.label && b.label.trim() && b.to && b.to.trim()
-      );
-      if (validButtons.length === 0) {
-        s.type = 'final_message';
-        delete s.buttons;
-      } else {
-        s.buttons = validButtons;
-      }
-    }
-  });
-
   data.steps = steps;
+  data.account_id = accountId;
 
-  const reminderText = document.getElementById('reminder_text').value.trim();
-  data.reminder_step = reminderText ? {
-    text: reminderText,
-    link_url: document.getElementById('reminder_link_url').value.trim(),
-    link_label: document.getElementById('reminder_link_label').value.trim() || 'Acessar',
-  } : null;
+  if (!accountId) {
+    const status = document.getElementById('status');
+    status.className = 'error';
+    status.textContent = 'Selecione uma conta na central antes de salvar.';
+    return;
+  }
 
   const status = document.getElementById('status');
   status.className = '';
@@ -629,10 +464,8 @@ document.getElementById('form').addEventListener('submit', async (e) => {
 (async () => {
   const session = await window.requireAuth();
   if (!session) return;
-  await loadAccounts();
-  await loadForEdit();
   await loadMedia();
-  markMediaSelected(document.getElementById('target_media_id').value);
+  await loadForEdit();
 })();
 </script>
 </body>

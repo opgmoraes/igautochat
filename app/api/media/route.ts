@@ -7,16 +7,14 @@ export async function GET(req: NextRequest) {
   const user = await requireUser(req);
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
-  const accountId = req.nextUrl.searchParams.get("account_id");
-  if (!accountId) return NextResponse.json({ media: [], error: "conta não informada" });
+  const { searchParams } = new URL(req.url);
+  const accountId = searchParams.get("account_id");
+  if (!accountId) {
+    return NextResponse.json({ media: [], error: "Selecione uma conta do Instagram primeiro" }, { status: 400 });
+  }
 
   const db = supabaseAdmin();
-  const { data: account } = await db
-    .from("ig_accounts")
-    .select("*")
-    .eq("id", accountId)
-    .single();
-
+  const { data: account } = await db.from("accounts").select("*").eq("id", accountId).single();
   if (!account?.access_token || !account?.ig_user_id) {
     return NextResponse.json({ media: [] });
   }
