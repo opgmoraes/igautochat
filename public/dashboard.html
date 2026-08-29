@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Central de Sinal — igautochat</title>
-<link rel="icon" type="image/png" href="/logo.png">
+<title>Central de Sinal — Meu ManyChat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
@@ -23,10 +22,10 @@
   .stat-card .lbl { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
   .stat-card.warn .num { color: var(--accent-red); }
   .banner {
-    border: 1.5px solid var(--accent-yellow); background: rgba(255, 197, 103, 0.1); border-radius: var(--radius);
+    border: 1.5px solid var(--accent-yellow); background: #FFF8E8; border-radius: var(--radius);
     padding: 12px 16px; font-size: 13px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start;
   }
-  .banner.danger { border-color: var(--accent-red); background: rgba(253, 90, 70, 0.1); }
+  .banner.danger { border-color: var(--accent-red); background: #FFF0EE; }
 
   .events-log { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
   .event-row {
@@ -42,48 +41,34 @@
   .status-tag.skipped { background: var(--surface-2); color: var(--text-muted); }
   .event-time { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 
-  .accounts-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+  .account-switcher { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; }
   .account-pill {
-    display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px;
-    border: 0.5px solid var(--border); border-radius: 999px; background: var(--surface);
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 6px; border-radius: 999px;
+    border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 600;
   }
-  .account-pill img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
-  .account-pill .avatar-empty { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); }
-  .account-pill .name { font-size: 13px; font-weight: 600; }
-  .account-pill .uname { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
-  .account-pill .rename-btn, .account-pill .disconnect-btn {
-    background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 2px;
-  }
-  .account-pill .disconnect-btn:hover { color: var(--accent-red); }
-  .account-tag {
-    display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10px;
-    color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px;
-  }
-  .add-account-btn { border-radius: 999px; }
+  .account-pill img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+  .account-pill .ph { width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); }
+  .account-pill.active { border-color: var(--accent-blue); color: var(--accent-blue); background: #EAF5FC; }
+  .account-pill.add { border-style: dashed; font-weight: 500; color: var(--text-muted); }
 </style>
 </head>
 <body>
   <div class="top-bar">
     <div>
-      <div class="brand-row"><img src="/logo.png" alt="" onerror="this.style.display='none'" /><span class="brand-name">igautochat</span></div>
       <div class="eyebrow"><span id="clock-dot" class="dot off"></span> painel · instagram</div>
       <h1>Central de Sinal</h1>
     </div>
-    <div style="display:flex;gap:8px;align-items:flex-start">
-      <a href="/analytics.html" class="btn small">Analytics</a>
-      <a href="/kanban.html" class="btn small">Conteúdo</a>
-      <a href="/calendario.html" class="btn small">Calendário</a>
-      <button class="btn small" id="logout-btn">Sair</button>
-    </div>
+    <button class="btn small" id="logout-btn">Sair</button>
   </div>
 
-  <div class="accounts-strip" id="accounts-strip"></div>
+  <div class="account-switcher" id="account-switcher"></div>
+  <div id="connection-box"></div>
   <div id="alerts"></div>
   <div class="stats-strip" id="stats-strip"></div>
 
   <div class="row">
     <h2>Automações<span class="count" id="auto-count"></span></h2>
-    <a href="/new-automation.html" class="btn primary">+ Nova automação</a>
+    <a href="/new-automation.html" id="new-automation-link" class="btn primary">+ Nova automação</a>
   </div>
 
   <div id="automations-list"></div>
@@ -100,48 +85,107 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   window.location.href = '/login.html';
 });
 
+// ---------- múltiplas contas ----------
+let accounts = [];
+let selectedAccountId = localStorage.getItem('igautochat_account_id') || null;
+let oauthErrorMsg = '';
+
 async function loadAccounts() {
   const res = await authFetch('/api/accounts');
-  const { accounts } = await res.json();
-  const strip = document.getElementById('accounts-strip');
-  const clockDot = document.getElementById('clock-dot');
+  const data = await res.json();
+  accounts = data.accounts || [];
 
-  clockDot.className = (accounts && accounts.length) ? 'dot live' : 'dot off';
+  const params = new URLSearchParams(window.location.search);
+  const justConnected = params.get('connected');
+  const oauthError = params.get('error');
 
-  const pills = (accounts || []).map(acc => `
-    <div class="account-pill">
-      ${acc.profile_picture_url ? `<img src="${acc.profile_picture_url}" alt="" />` : '<div class="avatar-empty"></div>'}
-      <div>
-        <div class="name">${escapeHtml(acc.label || acc.ig_username)}</div>
-        <div class="uname">@${escapeHtml(acc.ig_username)}</div>
-      </div>
-      <button class="rename-btn" onclick="renameAccount('${acc.id}', '${escapeHtml(acc.label || acc.ig_username)}')" title="Renomear">✎</button>
-      <button class="disconnect-btn" onclick="disconnectAccount('${acc.id}')" title="Desconectar">&times;</button>
-    </div>`).join('');
+  if (justConnected && accounts.some(a => a.id === justConnected)) {
+    selectedAccountId = justConnected;
+  } else if (!selectedAccountId || !accounts.some(a => a.id === selectedAccountId)) {
+    selectedAccountId = accounts[0]?.id || null;
+  }
+  if (selectedAccountId) localStorage.setItem('igautochat_account_id', selectedAccountId);
 
-  strip.innerHTML = pills + `<a href="/api/oauth/start" class="btn small add-account-btn primary">+ Conectar outra conta</a>`;
+  oauthErrorMsg = oauthError
+    ? `<div class="banner danger">⚠️ Erro ao conectar: ${escapeHtml(oauthError)}</div>`
+    : '';
+  if (justConnected) {
+    // limpa a URL pra não reprocessar em recarregamentos
+    window.history.replaceState({}, '', '/dashboard.html');
+  }
+
+  renderAccountSwitcher();
+  renderConnectionBox();
+  refreshForSelectedAccount();
 }
 
-async function renameAccount(id, current) {
-  const label = prompt('Nome dessa conta:', current);
-  if (!label || label === current) return;
-  await authFetch('/api/accounts/' + id, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label })
-  });
-  loadAccounts();
+function renderAccountSwitcher() {
+  const el = document.getElementById('account-switcher');
+  const pills = accounts.map(a => {
+    const active = a.id === selectedAccountId ? 'active' : '';
+    const avatar = a.profile_picture_url
+      ? `<img src="${a.profile_picture_url}" alt="" />`
+      : `<span class="ph"></span>`;
+    return `<button type="button" class="account-pill ${active}" onclick="selectAccount('${a.id}')">${avatar} @${escapeHtml(a.ig_username || 'conta')}</button>`;
+  }).join('');
+  el.innerHTML = `${pills}<a href="/api/oauth/start" class="account-pill add">+ Conectar outra conta</a>`;
 }
 
-async function disconnectAccount(id) {
-  if (!confirm('Desconectar essa conta? As automações dela ficam pausadas até você reconectar.')) return;
-  await authFetch('/api/accounts/' + id, { method: 'DELETE' });
-  loadAccounts();
+function selectAccount(id) {
+  selectedAccountId = id;
+  localStorage.setItem('igautochat_account_id', id);
+  renderAccountSwitcher();
+  renderConnectionBox();
+  refreshForSelectedAccount();
+}
+
+function refreshForSelectedAccount() {
+  const link = document.getElementById('new-automation-link');
+  link.href = selectedAccountId ? `/new-automation.html?account_id=${selectedAccountId}` : '/new-automation.html';
+  loadStats();
   loadAutomations();
+  loadEvents();
+}
+
+function renderConnectionBox() {
+  const box = document.getElementById('connection-box');
+  const clockDot = document.getElementById('clock-dot');
+  const account = accounts.find(a => a.id === selectedAccountId);
+
+  if (!account) {
+    clockDot.className = 'dot off';
+    box.innerHTML = `
+      <div class="status-strip">
+        <div class="left">
+          <span class="dot off"></span>
+          <div>
+            <div class="label">Instagram <b>desconectado</b></div>
+            <div class="sub">Conecte sua conta pra começar a escutar comentários e DMs</div>
+          </div>
+        </div>
+        <a href="/api/oauth/start" class="btn primary">Conectar</a>
+      </div>`;
+  } else {
+    clockDot.className = 'dot live';
+    box.innerHTML = `
+      <div class="status-strip">
+        <div class="left">
+          <span class="dot live"></span>
+          <div>
+            <div class="label">Conectado como <b>@${escapeHtml(account.ig_username)}</b></div>
+            <div class="sub">Escutando comentários, stories e DMs em tempo real</div>
+          </div>
+        </div>
+      </div>`;
+  }
 }
 
 async function loadStats() {
-  const res = await authFetch('/api/stats');
+  if (!selectedAccountId) {
+    document.getElementById('stats-strip').innerHTML = '';
+    return;
+  }
+  const res = await authFetch('/api/stats?account_id=' + selectedAccountId);
   const stats = await res.json();
   const strip = document.getElementById('stats-strip');
   const alerts = document.getElementById('alerts');
@@ -157,7 +201,7 @@ async function loadStats() {
     </div>
   `;
 
-  let alertHtml = '';
+  let alertHtml = oauthErrorMsg || '';
   if (stats.failed24h > 0) {
     alertHtml += `<div class="banner danger">⚠️ ${stats.failed24h} envio(s) falharam nas últimas 24h. Confira o log de atividade abaixo.</div>`;
   }
@@ -193,10 +237,21 @@ async function deleteAutomation(id) {
 }
 
 async function loadAutomations() {
-  const res = await authFetch('/api/automations');
-  const { automations } = await res.json();
   const list = document.getElementById('automations-list');
   const count = document.getElementById('auto-count');
+
+  if (!selectedAccountId) {
+    count.textContent = '';
+    list.innerHTML = `
+      <div class="empty">
+        <span class="big">&#8942;</span>
+        Conecte uma conta do Instagram acima pra ver e criar automações.
+      </div>`;
+    return;
+  }
+
+  const res = await authFetch('/api/automations?account_id=' + selectedAccountId);
+  const { automations } = await res.json();
 
   count.textContent = automations && automations.length ? `${automations.length} no total` : '';
 
@@ -204,7 +259,7 @@ async function loadAutomations() {
     list.innerHTML = `
       <div class="empty">
         <span class="big">&#8942;</span>
-        Nenhum sinal configurado ainda.<br/>
+        Nenhum sinal configurado ainda pra essa conta.<br/>
         Crie a primeira automação pra começar a converter comentários em DM.
       </div>`;
     return;
@@ -225,10 +280,6 @@ async function loadAutomations() {
       ? `<img src="${a.target_media_thumb}" alt="" class="auto-thumb" />`
       : `<div class="auto-thumb auto-thumb-empty"></div>`;
 
-    const accountTag = a.ig_accounts
-      ? `<div class="account-tag">📸 ${escapeHtml(a.ig_accounts.label || a.ig_accounts.ig_username)}</div>`
-      : `<div class="account-tag" style="color:var(--accent-red)">⚠ sem conta conectada</div>`;
-
     return `
       <div class="signal-row">
         ${thumb}
@@ -240,7 +291,6 @@ async function loadAutomations() {
           </div>
           <div class="meta">Gatilhos: ${gatilhos}</div>
           <div class="chips">${keywords}</div>
-          ${accountTag}
           <div class="actions">
             <a href="/new-automation.html?id=${a.id}" class="btn small">Editar</a>
             <button class="btn small" onclick="toggleAutomation('${a.id}', ${!a.active})">${a.active ? 'Pausar' : 'Ativar'}</button>
@@ -252,9 +302,13 @@ async function loadAutomations() {
 }
 
 async function loadEvents() {
-  const res = await authFetch('/api/events');
-  const { items } = await res.json();
   const log = document.getElementById('events-log');
+  if (!selectedAccountId) {
+    log.innerHTML = '';
+    return;
+  }
+  const res = await authFetch('/api/events?account_id=' + selectedAccountId);
+  const { items } = await res.json();
 
   if (!items || items.length === 0) {
     log.innerHTML = '<p class="empty" style="padding:20px">Nenhuma atividade ainda.</p>';
@@ -288,10 +342,7 @@ function escapeHtml(str) {
 (async () => {
   const session = await window.requireAuth();
   if (!session) return; // já foi redirecionado pro login
-  loadAccounts();
-  loadStats();
-  loadAutomations();
-  loadEvents();
+  loadAccounts(); // já dispara stats/automations/events pra conta selecionada
 })();
 </script>
 </body>

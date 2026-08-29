@@ -48,13 +48,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       trigger_dm: !!body.trigger_dm,
       keywords,
       match_type: body.match_type || "contains",
-      ig_account_id: body.ig_account_id || null,
       target_media_id: body.target_media_id || null,
       target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,
       steps,
-      reminder_step: body.reminder_step && body.reminder_step.text ? body.reminder_step : null,
+      reminder_text: body.reminder_text || null,
       reminder_delay_minutes: Number(body.reminder_delay_minutes || 60),
     })
     .eq("id", id);
