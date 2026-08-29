@@ -14,12 +14,10 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
   const now = new Date().toISOString();
 
-  // Pega itens pendentes, prontos pra enviar, já trazendo a conta (token) de cada um.
-  // Cada item da fila é de uma conta específica — contas diferentes podem estar
-  // misturadas no mesmo lote, e cada uma usa suas próprias credenciais.
+  // Traz o item já com os dados da conta de Instagram correspondente (token/ig_user_id)
   const { data: items } = await db
     .from("queue")
-    .select("*, contacts(*), accounts(*)")
+    .select("*, contacts(*), ig_accounts(*)")
     .eq("status", "pending")
     .lte("send_after", now)
     .order("created_at")
@@ -30,18 +28,13 @@ export async function POST(req: NextRequest) {
   let skipped = 0;
 
   for (const item of items || []) {
-    const account = (item as any).accounts;
+    const account = item.ig_accounts;
     if (!account?.access_token || !account?.ig_user_id) {
-      await db
-        .from("queue")
-        .update({ status: "failed", error: "conta do Instagram não encontrada ou desconectada" })
-        .eq("id", item.id)
-        .eq("status", "pending");
+      await db.from("queue").update({ status: "failed", error: "conta desconectada" }).eq("id", item.id);
       failed++;
       continue;
     }
 
-    // Trava atômica: só processa se conseguir passar de pending -> sending
     const { data: claimed } = await db
       .from("queue")
       .update({ status: "sending", claimed_at: new Date().toISOString() })
@@ -49,9 +42,8 @@ export async function POST(req: NextRequest) {
       .eq("status", "pending")
       .select()
       .single();
-    if (!claimed) continue; // outro processo já pegou
+    if (!claimed) continue;
 
-    // Respeita a janela de 24h quando necessário
     if (item.needs_24h_window) {
       const lastReply = item.contacts?.last_reply_at
         ? new Date(item.contacts.last_reply_at).getTime()
@@ -68,14 +60,12 @@ export async function POST(req: NextRequest) {
       if (item.kind === "public_reply") {
         await publicReply(item.recipient_value, account.access_token, item.payload.text);
       } else if (item.kind === "flow_step") {
-        // Busca a automação pra pegar a etapa certa do fluxo (fonte da verdade, evita
-        // duplicar texto na fila e continua correto mesmo se a automação for editada)
         const { data: auto } = await db
           .from("automations")
           .select("steps")
           .eq("id", item.automation_id)
           .single();
-        const step = auto?.steps?.[item.payload.step_index];
+        const step = (auto?.steps || []).find((s: any) => s.id === item.payload.step_id);
         if (!step) {
           await db.from("queue").update({ status: "skipped", error: "etapa não existe mais" }).eq("id", item.id);
           skipped++;
@@ -83,6 +73,12 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        const validButtons = (step.buttons || []).filter(
+          (b: any) => Boolean(b?.label?.trim()) && Boolean(b?.to?.trim())
+        );
+
+        // Cada etapa é independente. Só usamos quick_replies quando existem
+        // botões válidos; sem botões, a etapa é enviada como texto puro.
         const message =
           step.type === "link"
             ? buildLinkMessage({
@@ -91,7 +87,12 @@ export async function POST(req: NextRequest) {
                 link_url: step.link_url,
                 quick_reply_label: "",
               })
-            : buildQuickReplyMessage(step.text, step.button_label, `STEP_${item.payload.step_index + 1}`);
+            : step.type === "final_message" || validButtons.length === 0
+            ? { text: step.text || "..." }
+            : buildQuickReplyMessage(
+                step.text,
+                validButtons.map((b: any) => ({ label: b.label, payload: `STEP_${b.to}` }))
+              );
 
         await sendMessage({
           igUserId: account.ig_user_id,
@@ -101,7 +102,6 @@ export async function POST(req: NextRequest) {
           message,
         });
       } else {
-        // Lembrete: reenvia o link junto com o texto de lembrete
         const message = buildLinkMessage(item.payload as any);
         await sendMessage({
           igUserId: account.ig_user_id,

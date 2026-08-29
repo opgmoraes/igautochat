@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Meu ManyChat",
+  title: "igautochat",
   description: "Automação de DMs do Instagram",
+  icons: { icon: "/logo.png" },
 };
 
 export default function RootLayout({
