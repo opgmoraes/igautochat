@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   if (error || !code) {
     return NextResponse.redirect(
-      `${process.env.APP_URL}/dashboard.html?error=${encodeURIComponent(error || "sem_code")}`
+      `${process.env.APP_URL}/dashboard.html?error=${encodeURIComponent(error || "sem_code")}`,
     );
   }
 
@@ -29,17 +29,20 @@ export async function GET(req: NextRequest) {
     // upsert por ig_user_id: se essa conta já existia, atualiza o token;
     // se é uma conta nova, cria uma linha nova — assim dá pra ter várias contas conectadas ao mesmo tempo
     const { data: account, error: dbError } = await db
-      .from("accounts")
+      .from("ig_accounts")
       .upsert(
         {
+          label: profile.username,
           ig_user_id: profile.user_id,
           ig_username: profile.username,
           profile_picture_url: profile.profile_picture_url,
           access_token: long.access_token,
-          token_expires_at: new Date(Date.now() + long.expires_in * 1000).toISOString(),
+          token_expires_at: new Date(
+            Date.now() + long.expires_in * 1000,
+          ).toISOString(),
           connected_at: new Date().toISOString(),
         },
-        { onConflict: "ig_user_id" }
+        { onConflict: "ig_user_id" },
       )
       .select()
       .single();
@@ -48,10 +51,12 @@ export async function GET(req: NextRequest) {
     // Assina os webhooks de comments/messages para essa conta
     await subscribeApp(profile.user_id, long.access_token);
 
-    return NextResponse.redirect(`${process.env.APP_URL}/dashboard.html?connected=${account.id}`);
+    return NextResponse.redirect(
+      `${process.env.APP_URL}/dashboard.html?connected=${account.id}`,
+    );
   } catch (e: any) {
     return NextResponse.redirect(
-      `${process.env.APP_URL}/dashboard.html?error=${encodeURIComponent(e.message)}`
+      `${process.env.APP_URL}/dashboard.html?error=${encodeURIComponent(e.message)}`,
     );
   }
 }
