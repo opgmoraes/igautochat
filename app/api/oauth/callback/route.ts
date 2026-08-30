@@ -29,10 +29,9 @@ export async function GET(req: NextRequest) {
     // upsert por ig_user_id: se essa conta já existia, atualiza o token;
     // se é uma conta nova, cria uma linha nova — assim dá pra ter várias contas conectadas ao mesmo tempo
     const { data: account, error: dbError } = await db
-      .from("ig_accounts")
+      .from("accounts")
       .upsert(
         {
-          label: profile.username,
           ig_user_id: profile.user_id,
           ig_username: profile.username,
           profile_picture_url: profile.profile_picture_url,

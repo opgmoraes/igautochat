@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!accountId) return NextResponse.json({ error: "conta não informada" }, { status: 400 });
 
   const db = supabaseAdmin();
-  const { data: account } = await db.from("ig_accounts").select("*").eq("id", accountId).single();
+  const { data: account } = await db.from("accounts").select("*").eq("id", accountId).single();
 
   if (!account?.access_token || !account?.ig_user_id) {
     return NextResponse.json({ error: "conta desconectada" }, { status: 400 });
@@ -53,14 +53,14 @@ export async function GET(req: NextRequest) {
     const { count: initiations } = await db
       .from("queue")
       .select("id", { count: "exact", head: true })
-      .eq("ig_account_id", accountId)
+      .eq("account_id", accountId)
       .eq("kind", "flow_step")
       .filter("payload->>step_index", "eq", "0");
 
     const { data: engagedRows } = await db
       .from("queue")
       .select("contact_id")
-      .eq("ig_account_id", accountId)
+      .eq("account_id", accountId)
       .eq("kind", "flow_step")
       .filter("payload->>step_index", "neq", "0");
     const engaged = new Set((engagedRows || []).map((r: any) => r.contact_id)).size;
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     const { count: automationsCount } = await db
       .from("automations")
       .select("id", { count: "exact", head: true })
-      .eq("ig_account_id", accountId)
+      .eq("account_id", accountId)
       .eq("active", true);
 
     return NextResponse.json({

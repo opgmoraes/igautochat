@@ -137,11 +137,6 @@ alter table contacts add constraint contacts_last_automation_id_fkey
 alter table automations add column if not exists pre_link_message text;
 alter table automations add column if not exists pre_link_quick_reply_label text default 'Já segui!';
 
--- Libera o novo tipo de item de fila usado na etapa intermediária do funil
-alter table queue drop constraint if exists queue_kind_check;
-alter table queue add constraint queue_kind_check
-  check (kind in ('private_reply','dm','public_reply','link','reminder','prelink'));
-
 -- =========================================================
 -- MIGRAÇÃO: modo "meu próximo post" (funciona com posts agendados)
 -- Rode isso no SQL Editor do Supabase (uma vez só)
@@ -199,3 +194,30 @@ alter table queue add column if not exists account_id uuid references accounts(i
 update queue set account_id = (select id from accounts order by created_at limit 1)
 where account_id is null;
 create index if not exists idx_queue_account on queue(account_id);
+
+-- =========================================================
+-- MIGRAÇÃO: apelido da conta (usado pra renomear no painel, ex: "Founder" / "BITTO")
+-- Rode isso no SQL Editor do Supabase (uma vez só)
+-- =========================================================
+alter table accounts add column if not exists label text;
+
+-- =========================================================
+-- MÓDULO: Personal Content OS (Kanban + Calendário de conteúdo)
+-- Rode isso no SQL Editor do Supabase (uma vez só)
+-- =========================================================
+create table if not exists content_pipeline (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  content_body text,
+  status text not null default 'ideia' check (status in ('ideia', 'organizando', 'pronto')),
+  dm_keyword text,
+  post_date date,
+  source_path text,          -- caminho do arquivo .md de origem (útil pro script Python evitar duplicar)
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists idx_content_status on content_pipeline(status);
+create index if not exists idx_content_post_date on content_pipeline(post_date);
+
+alter table content_pipeline enable row level security;
+-- sem policies: só o servidor com service key acessa (igual as outras tabelas)
