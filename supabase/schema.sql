@@ -159,35 +159,13 @@ alter table queue add constraint queue_kind_check
   check (kind in ('private_reply','dm','public_reply','link','reminder','prelink','flow_step'));
 
 -- =========================================================
--- MÓDULO: Personal Content OS (Kanban + Calendário de conteúdo)
+-- MIGRAÇÃO: múltiplas contas de Instagram
 -- Rode isso no SQL Editor do Supabase (uma vez só)
+-- A tabela "config" (linha única) fica intacta como legado, mas o app
+-- passa a usar "accounts" (uma linha por conta conectada) daqui pra frente.
 -- =========================================================
-create table if not exists content_pipeline (
+create table if not exists accounts (
   id uuid primary key default gen_random_uuid(),
-  title text not null,
-  content_body text,
-  status text not null default 'ideia' check (status in ('ideia', 'organizando', 'pronto')),
-  dm_keyword text,
-  post_date date,
-  source_path text,          -- caminho do arquivo .md de origem (útil pro script Python evitar duplicar)
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create index if not exists idx_content_status on content_pipeline(status);
-create index if not exists idx_content_post_date on content_pipeline(post_date);
-
-alter table content_pipeline enable row level security;
--- sem policies: só o servidor com service key acessa (igual as outras tabelas)
-
--- =========================================================
--- MIGRAÇÃO: múltiplas contas de Instagram conectadas
--- Rode isso no SQL Editor do Supabase (uma vez só)
--- =========================================================
-
--- Tabela nova: uma linha por conta de Instagram conectada
-create table if not exists ig_accounts (
-  id uuid primary key default gen_random_uuid(),
-  label text,                 -- nome amigável, ex: "Founder" ou "BITTO"
   ig_user_id text unique,
   ig_username text,
   profile_picture_url text,
@@ -196,42 +174,28 @@ create table if not exists ig_accounts (
   connected_at timestamptz,
   created_at timestamptz not null default now()
 );
-alter table ig_accounts enable row level security;
+alter table accounts enable row level security;
 
--- Migra a conta única que já estava conectada (se existir) pra nova tabela
-insert into ig_accounts (label, ig_user_id, ig_username, profile_picture_url, access_token, token_expires_at, connected_at)
-select coalesce(ig_username, 'Conta principal'), ig_user_id, ig_username, profile_picture_url, access_token, token_expires_at, connected_at
+-- migra a conta única que já estava em "config" (se existir) pra "accounts"
+insert into accounts (ig_user_id, ig_username, profile_picture_url, access_token, token_expires_at, connected_at)
+select ig_user_id, ig_username, profile_picture_url, access_token, token_expires_at, connected_at
 from config
 where ig_user_id is not null
 on conflict (ig_user_id) do nothing;
 
--- Cada automação agora pertence a UMA conta específica
-alter table automations add column if not exists ig_account_id uuid references ig_accounts(id) on delete cascade;
--- automações antigas (sem conta definida) ficam associadas à primeira conta migrada, se houver
-update automations set ig_account_id = (select id from ig_accounts order by created_at limit 1)
-where ig_account_id is null;
+-- automations agora pertencem a uma conta específica
+alter table automations add column if not exists account_id uuid references accounts(id) on delete cascade;
+update automations set account_id = (select id from accounts order by created_at limit 1)
+where account_id is null;
+create index if not exists idx_automations_account on automations(account_id);
 
--- Contatos agora são únicos por CONTA + id do Instagram (a mesma pessoa pode comentar
--- em contas diferentes suas, e são registros separados)
-alter table contacts add column if not exists ig_account_id uuid references ig_accounts(id) on delete cascade;
-update contacts set ig_account_id = (select id from ig_accounts order by created_at limit 1)
-where ig_account_id is null;
-alter table contacts drop constraint if exists contacts_ig_scoped_id_key;
-alter table contacts drop constraint if exists contacts_account_scoped_unique;
-alter table contacts add constraint contacts_account_scoped_unique unique (ig_account_id, ig_scoped_id);
+-- contacts guardam de qual conta vieram (evita cruzar fluxo entre contas)
+alter table contacts add column if not exists account_id uuid references accounts(id) on delete cascade;
+update contacts set account_id = (select id from accounts order by created_at limit 1)
+where account_id is null;
 
--- Fila de envio também precisa saber de qual conta enviar
-alter table queue add column if not exists ig_account_id uuid references ig_accounts(id) on delete cascade;
-
--- =========================================================
--- MIGRAÇÃO: fluxo com ramificação (múltiplos botões por etapa)
--- e lembrete independente do link final
--- Rode isso no SQL Editor do Supabase (uma vez só)
--- =========================================================
-alter table automations add column if not exists reminder_step jsonb;
--- reminder_step guarda: { "text": "...", "link_label": "...", "link_url": "..." }
--- Se link_url estiver vazio, o lembrete vira só uma mensagem de texto, sem botão.
-
--- OBS: automações criadas antes dessa mudança têm "steps" no formato antigo
--- (por índice numérico, um botão só por etapa). Recomendo recriar do zero as
--- automações de teste que você tiver ativas, pra já usar o formato novo.
+-- queue guarda a conta usada no envio (não depende só da automação, que pode ser apagada)
+alter table queue add column if not exists account_id uuid references accounts(id) on delete cascade;
+update queue set account_id = (select id from accounts order by created_at limit 1)
+where account_id is null;
+create index if not exists idx_queue_account on queue(account_id);
