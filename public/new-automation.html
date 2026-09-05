@@ -176,9 +176,17 @@
         <label>Texto do lembrete</label>
         <textarea name="reminder_text" id="reminder_text" rows="2" placeholder="Ainda não viu? O link continua aqui"></textarea>
       </div>
-      <div class="field" style="margin-bottom:0">
+      <div class="field">
         <label>Atraso <span class="hint">minutos depois do link ser enviado</span></label>
         <input name="reminder_delay_minutes" type="number" value="60" style="max-width:140px" />
+      </div>
+      <div class="field">
+        <label>Texto do botão do lembrete <span class="hint">deixe em branco pra usar o mesmo da mensagem final</span></label>
+        <input name="reminder_link_label" id="reminder_link_label" placeholder="Acessar" />
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Link do lembrete <span class="hint">deixe em branco pra usar o mesmo link da mensagem final</span></label>
+        <input name="reminder_link_url" id="reminder_link_url" placeholder="https://..." />
       </div>
     </fieldset>
 
@@ -406,6 +414,8 @@ async function loadForEdit() {
   form.match_type.value = a.match_type || 'contains';
   form.reminder_text.value = a.reminder_text || '';
   form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
+  form.reminder_link_label.value = a.reminder_link_label || '';
+  form.reminder_link_url.value = a.reminder_link_url || '';
   document.getElementById('target_media_id').value = a.target_media_id || '';
   document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
   const modeRadio = document.querySelector(`input[name="target_mode"][value="${a.target_mode || 'any'}"]`);

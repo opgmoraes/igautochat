@@ -57,6 +57,8 @@ export async function POST(req: NextRequest) {
       steps,
       reminder_text: body.reminder_text || null,
       reminder_delay_minutes: Number(body.reminder_delay_minutes || 60),
+      reminder_link_label: body.reminder_link_label || null,
+      reminder_link_url: body.reminder_link_url || null,
     })
     .select()
     .single();

@@ -38,6 +38,8 @@ create table if not exists automations (
   link_url text not null default '',
   reminder_text text,
   reminder_delay_minutes int default 60,
+  reminder_link_label text,
+  reminder_link_url text,
   created_at timestamptz not null default now()
 );
 

@@ -242,8 +242,9 @@ async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any,
           send_after: new Date(Date.now() + (auto.reminder_delay_minutes || 60) * 60000).toISOString(),
           payload: {
             welcome_message: auto.reminder_text,
-            link_label: step.link_label,
-            link_url: step.link_url,
+            // Lembrete usa seu próprio link, se configurado; senão cai no link da etapa final
+            link_label: auto.reminder_link_label || step.link_label,
+            link_url: auto.reminder_link_url || step.link_url,
           },
         });
       }
