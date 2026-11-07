@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     .from("queue")
     .select("id", { count: "exact", head: true })
     .eq("status", "sent")
+    .not("kind", "in", "(public_reply,verify_follow)")
     .gte("created_at", since7d);
   if (accountId) sentQuery = sentQuery.eq("account_id", accountId);
   const { count: sentWeek } = await sentQuery;
@@ -28,6 +29,13 @@ export async function GET(req: NextRequest) {
     .gte("created_at", since24h);
   if (accountId) failedQuery = failedQuery.eq("account_id", accountId);
   const { count: failed24h } = await failedQuery;
+
+  const countMetric = (kind: string) => {
+    let q = db.from('queue').select('id',{count:'exact',head:true}).eq('status','sent').gte('sent_at',since7d);
+    q = kind === 'links' ? q.contains('payload',{delivery_type:'link'}) : q.eq('kind','verify_follow');
+    return accountId ? q.eq('account_id',accountId) : q;
+  };
+  const [links,verifications] = await Promise.all([countMetric('links'),countMetric('verifications')]);
 
   let tokenExpiresAt: string | null = null;
   if (accountId) {
@@ -43,5 +51,7 @@ export async function GET(req: NextRequest) {
     sentWeek: sentWeek || 0,
     failed24h: failed24h || 0,
     tokenExpiresAt,
+    linksWeek: links.count || 0,
+    verificationsWeek: verifications.count || 0,
   });
 }

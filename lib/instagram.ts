@@ -97,8 +97,8 @@ export async function subscribeApp(igUserId: string, token: string) {
 
 type SendPayload =
   | { text: string }
-  | { attachment: { type: "template"; payload: any } }
-  | { text: string; quick_replies: any[] };
+  | { attachment: { type: "template"; payload: { template_type: string; text: string; buttons: { type: string; url: string; title: string }[] } } }
+  | { text: string; quick_replies: { content_type: string; title: string; payload: string }[] };
 
 export async function sendMessage(opts: {
   igUserId: string;
@@ -118,12 +118,28 @@ export async function sendMessage(opts: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
     },
   );
   const json = await res.json();
   if (!res.ok)
-    throw new Error(`Falha ao enviar mensagem: ${JSON.stringify(json)}`);
+    throw new MetaSendError('Falha ao enviar mensagem pela Meta', res.status === 429 || json.error?.is_transient === true);
   return json;
+}
+
+// Apenas rejeições explícitas da Meta podem ser repetidas. Timeout é ambíguo.
+export class MetaSendError extends Error {
+  retryable: boolean;
+  constructor(message: string, retryable: boolean) { super(message); this.retryable = retryable; }
+}
+
+export async function fetchFollowerStatus(igScopedId: string, token: string) {
+  const params = new URLSearchParams({ fields: 'is_user_follow_business' });
+  const res = await fetch(`${GRAPH_BASE}/${encodeURIComponent(igScopedId)}?${params}`, {
+    headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return null;
+  return res.json();
 }
 
 export async function publicReply(
@@ -137,11 +153,12 @@ export async function publicReply(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
+      signal: AbortSignal.timeout(15000),
     },
   );
   const json = await res.json();
   if (!res.ok)
-    throw new Error(`Falha ao responder comentário: ${JSON.stringify(json)}`);
+    throw new MetaSendError('Falha ao responder comentário pela Meta', res.status === 429 || json.error?.is_transient === true);
   return json;
 }
 

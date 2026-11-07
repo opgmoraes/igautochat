@@ -1,280 +1,155 @@
-import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
-import { after } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
-import { matches, fetchMedia } from "@/lib/instagram";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { NextRequest, NextResponse, after } from 'next/server';
+import crypto from 'crypto';
+import { supabaseAdmin } from '@/lib/supabase';
+import { matches, fetchMedia } from '@/lib/instagram';
+import { createRun, enqueue } from '@/lib/automation-store';
 
-// --- 1) Handshake de verificação (Meta faz um GET ao cadastrar o webhook) ---
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
-  const challenge = searchParams.get("hub.challenge");
-
-  if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-    return new NextResponse(challenge, { status: 200 });
-  }
-  return new NextResponse("Forbidden", { status: 403 });
+  const p = new URL(req.url).searchParams;
+  if (process.env.WEBHOOK_VERIFY_TOKEN && p.get('hub.mode') === 'subscribe' && p.get('hub.verify_token') === process.env.WEBHOOK_VERIFY_TOKEN) return new NextResponse(p.get('hub.challenge'));
+  return new NextResponse('Forbidden', {status:403});
 }
 
-// --- 2) Eventos reais (comentários e mensagens) ---
 export async function POST(req: NextRequest) {
   const raw = await req.text();
-
-  const signature = req.headers.get("x-hub-signature-256") || "";
-  const expected =
-    "sha256=" +
-    crypto.createHmac("sha256", process.env.IG_APP_SECRET!).update(raw).digest("hex");
-  if (
-    signature.length !== expected.length ||
-    !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-  ) {
-    return new NextResponse("Invalid signature", { status: 401 });
-  }
-
-  const body = JSON.parse(raw);
+  if (!process.env.IG_APP_SECRET) return new NextResponse('Webhook unavailable', {status:503});
+  const signature = req.headers.get('x-hub-signature-256') || '';
+  const expected = 'sha256=' + crypto.createHmac('sha256', process.env.IG_APP_SECRET).update(raw).digest('hex');
+  if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return new NextResponse('Invalid signature', {status:401});
+  let body;
+  try { body = JSON.parse(raw); } catch { return new NextResponse('Invalid JSON', {status:400}); }
   const db = supabaseAdmin();
-
-  for (const entry of body.entry || []) {
-    // entry.id é o IGID da conta profissional que RECEBEU o evento.
-    // Como agora suportamos várias contas conectadas ao mesmo app, é isso
-    // que diz de qual conta (e com qual token/automações) tratar o evento.
-    const { data: account } = await db
-      .from("accounts")
-      .select("*")
-      .eq("ig_user_id", entry.id)
-      .maybeSingle();
-    if (!account) continue; // evento de uma conta que não está conectada aqui
-
-    for (const change of entry.changes || []) {
-      if (change.field === "comments") {
-        await db.from("events").insert({ kind: "comment", raw: change.value });
-        await handleComment(db, account, change.value);
+  try {
+    for (const entry of body.entry || []) {
+      const { data: account, error } = await db.from('accounts').select('*').eq('ig_user_id', entry.id).maybeSingle();
+      if (error) throw error;
+      if (!account) continue;
+      for (const change of entry.changes || []) {
+        if (change.field !== 'comments') continue;
+        await recordEvent(db,'comment',change.value,`${account.id}:comment:${change.value?.id}`);
+        await handleComment(db, account, change.value, entry.time);
+      }
+      for (const msg of entry.messaging || []) {
+        await recordEvent(db,'message',msg,`${account.id}:message:${msg.message?.mid || crypto.createHash('sha256').update(JSON.stringify(msg)).digest('hex')}`);
+        await handleMessage(db, account, msg);
       }
     }
-    for (const msg of entry.messaging || []) {
-      await db.from("events").insert({ kind: "message", raw: msg });
-      await handleMessage(db, account, msg);
-    }
+  } catch {
+    // Não confirma recebimento se a persistência falhar; Meta pode reentregar.
+    return NextResponse.json({error:'Não foi possível persistir o evento'}, {status:503});
   }
-
   after(async () => {
-    try {
-      await fetch(`${process.env.APP_URL}/api/cron/drain`, {
-        method: "POST",
-        headers: { "x-cron-secret": process.env.CRON_SECRET! },
-      });
-    } catch {
-      // o cron de 1 em 1 minuto cobre se isso falhar
-    }
+    if (!process.env.CRON_SECRET || !process.env.APP_URL) return;
+    try { await fetch(`${process.env.APP_URL}/api/cron/drain`, {method:'POST',headers:{'x-cron-secret':process.env.CRON_SECRET},signal:AbortSignal.timeout(5000)}); } catch { /* cron cobre falhas */ }
   });
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ok:true});
 }
 
-// Etapas do fluxo: array de { type: 'message', text, button_label } (0 ou mais)
-// terminando sempre em 1 etapa { type: 'link', text, link_label, link_url }.
-function firstStep(steps: any[]) {
-  return steps?.[0] || null;
+type DB = ReturnType<typeof supabaseAdmin>;
+async function recordEvent(db: DB, kind: string, raw: unknown, eventKey: string) {
+  const {error} = await db.from('events').upsert({kind,raw,event_key:eventKey},{onConflict:'event_key',ignoreDuplicates:true});
+  if (error) throw error;
+}
+async function start(db: DB, account: any, contact: any, auto: any, key: string, commentId?: string, occurredAt?: string) {
+  const run = await createRun(db, account.id, contact.id, auto, key);
+  await enqueue(db, {
+    run_id:run.id, dedup_key:`${run.id}:step:0`, contact_id:contact.id,
+    automation_id:run.automation_id, account_id:account.id, kind:'flow_step',
+    recipient_type:commentId ? 'comment_id' : 'id', recipient_value:commentId || contact.ig_scoped_id,
+    needs_24h_window:!commentId, payload:{step_index:0, occurred_at:occurredAt},
+  });
+  const {error} = await db.from('contacts').update({last_automation_id:run.automation_id}).eq('id',contact.id);
+  if (error) throw error;
+  return run;
 }
 
-async function handleComment(db: ReturnType<typeof supabaseAdmin>, account: any, value: any) {
-  const commentId = value.id;
-  const mediaId = value.media?.id;
-  const text = value.text || "";
-  if (value.from?.id && account.ig_user_id && value.from.id === account.ig_user_id) return;
-
-  // Meta pode reentregar o mesmo evento de comentário (retry de webhook).
-  // Sem essa trava, cada reentrega sorteia e enfileira outra resposta pública/DM
-  // pro mesmo comentário, dando a impressão de que "todas as variações" são enviadas.
-  const { data: already } = await db
-    .from("queue")
-    .select("id")
-    .eq("recipient_type", "comment_id")
-    .eq("recipient_value", commentId)
-    .limit(1);
-  if (already && already.length) return;
-
-  // Só automações DESSA conta — é isso que impede a conta A responder
-  // com o token/fluxo configurado pra conta B.
-  const { data: autos } = await db
-    .from("automations")
-    .select("*")
-    .eq("account_id", account.id)
-    .eq("active", true)
-    .eq("trigger_comment", true);
-
-  // Se alguma automação usa "meu próximo post", busca o post mais recente dessa conta 1x só
-  let latestMediaId: string | null | undefined;
-  const needsLatest = (autos || []).some((a) => a.target_mode === "latest");
-  if (needsLatest) {
-    try {
-      if (account.access_token && account.ig_user_id) {
-        const res = await fetchMedia(account.ig_user_id, account.access_token);
-        latestMediaId = res.data?.[0]?.id || null;
-      }
-    } catch {
-      latestMediaId = null;
-    }
+async function handleComment(db: DB, account: any, value: any, entryTime: number) {
+  const sender = value.from?.id;
+  if (!value.id || !sender || sender === account.ig_user_id || value.media?.media_product_type === 'LIVE') return;
+  const legacy = await db.from('queue').select('id').eq('account_id',account.id).eq('recipient_type','comment_id').eq('recipient_value',value.id).is('run_id',null).limit(1).maybeSingle();
+  if (legacy.error) throw legacy.error;
+  if (legacy.data) return;
+  const {data:autos,error} = await db.from('automations').select('*').eq('account_id',account.id).eq('active',true).eq('trigger_comment',true);
+  if (error) throw error;
+  let latest: string | null = null;
+  if ((autos || []).some(a => a.target_mode === 'latest')) {
+    try { latest = (await fetchMedia(account.ig_user_id,account.access_token)).data?.[0]?.id || null; } catch { /* falha fechada */ }
   }
-
   for (const auto of autos || []) {
-    if (auto.target_mode === "specific" && auto.target_media_id && auto.target_media_id !== mediaId) continue;
-    if (auto.target_mode === "latest" && latestMediaId && latestMediaId !== mediaId) continue;
-    if (!matches(auto.keywords, auto.match_type, text)) continue;
-
-    const igScopedId = value.from?.id;
-    if (!igScopedId) continue;
-    const { data: contact } = await db
-      .from("contacts")
-      .upsert(
-        {
-          ig_scoped_id: igScopedId,
-          username: value.from?.username,
-          last_automation_id: auto.id,
-          account_id: account.id,
-        },
-        { onConflict: "ig_scoped_id" }
-      )
-      .select()
-      .single();
-
-    const step0 = firstStep(auto.steps);
-    if (step0) {
-      // Resposta privada — fura a janela de 24h, 1x por comentário, até 7 dias
-      await db.from("queue").insert({
-        contact_id: contact.id,
-        automation_id: auto.id,
-        account_id: account.id,
-        kind: "flow_step",
-        recipient_type: "comment_id",
-        recipient_value: commentId,
-        needs_24h_window: false,
-        payload: { step_index: 0 },
-      });
-    }
-
-    // Resposta pública opcional (sorteia entre variações)
-    if (auto.public_replies?.length) {
-      const pick = auto.public_replies[Math.floor(Math.random() * auto.public_replies.length)];
-      await db.from("queue").insert({
-        contact_id: contact.id,
-        automation_id: auto.id,
-        account_id: account.id,
-        kind: "public_reply",
-        recipient_type: "comment_id",
-        recipient_value: commentId,
-        payload: { text: pick },
-      });
-    }
-    break; // 1 automação por comentário
+    if (auto.target_mode === 'specific' && auto.target_media_id !== value.media?.id) continue;
+    if (auto.target_mode === 'latest' && (!latest || latest !== value.media?.id)) continue;
+    if (!matches(auto.keywords,auto.match_type,value.text || '') || !auto.steps?.length) continue;
+    const {data:contact,error} = await db.from('contacts').upsert({account_id:account.id,ig_scoped_id:sender,username:value.from?.username},{onConflict:'account_id,ig_scoped_id'}).select().single();
+    if (error) throw error;
+    const eventTime = Number(entryTime) * (Number(entryTime) < 1e12 ? 1000 : 1);
+    if (!Number.isFinite(eventTime) || eventTime <= 0 || eventTime > Date.now() + 60000) return;
+    const run = await start(db,account,contact,auto,`${account.id}:comment:${value.id}`,value.id,new Date(eventTime).toISOString());
+    const replies = run.snapshot.public_replies;
+    if (replies?.length) await enqueue(db, {
+      run_id:run.id,dedup_key:`${run.id}:public`,contact_id:contact.id,automation_id:run.automation_id,account_id:account.id,
+      kind:'public_reply',recipient_type:'comment_id',recipient_value:value.id,
+      payload:{text:replies[Math.floor(Math.random()*replies.length)]},
+    });
+    break;
   }
 }
 
-async function handleMessage(db: ReturnType<typeof supabaseAdmin>, account: any, msg: any) {
-  const senderId = msg.sender?.id;
-  if (!senderId || (account.ig_user_id && senderId === account.ig_user_id)) return;
-
-  const isStoryReply = !!msg.message?.reply_to?.story;
-  const text = msg.message?.text || "";
-  const isQuickReplyClick = !!msg.message?.quick_reply;
-
-  const { data: contact } = await db
-    .from("contacts")
-    .upsert({ ig_scoped_id: senderId, account_id: account.id }, { onConflict: "ig_scoped_id" })
-    .select()
-    .single();
-
-  // Clique num botão de resposta rápida -> avança pra etapa indicada no payload do clique
-  // (nunca reage a texto solto — só a cliques reais, senão reenvia toda hora)
-  if (isQuickReplyClick && contact.last_automation_id) {
-    const clickPayload: string = msg.message?.quick_reply?.payload || "";
-    const match = clickPayload.match(/^STEP_(\d+)$/);
-    const stepIndex = match ? parseInt(match[1], 10) : 0;
-
-    const { data: auto } = await db
-      .from("automations")
-      .select("*")
-      .eq("id", contact.last_automation_id)
-      .single();
-
-    if (!auto || !Array.isArray(auto.steps) || !auto.steps[stepIndex]) return;
-
-    // Evita reenviar a mesma etapa se a Meta reentregar o mesmo evento
-    const { data: already } = await db
-      .from("queue")
-      .select("id, payload")
-      .eq("contact_id", contact.id)
-      .eq("automation_id", contact.last_automation_id)
-      .eq("kind", "flow_step");
-    const alreadySent = (already || []).some((q: any) => q.payload?.step_index === stepIndex);
-    if (alreadySent) return;
-
-    const step = auto.steps[stepIndex];
-
-    await db.from("queue").insert({
-      contact_id: contact.id,
-      automation_id: contact.last_automation_id,
-      account_id: account.id,
-      kind: "flow_step",
-      recipient_type: "id",
-      recipient_value: senderId,
-      needs_24h_window: false, // conversa está aberta, acabou de responder
-      payload: { step_index: stepIndex },
-    });
-
-    // Se essa foi a etapa final (o link), marca resposta e agenda o lembrete opcional
-    if (step.type === "link") {
-      await db
-        .from("contacts")
-        .update({ last_reply_at: new Date().toISOString() })
-        .eq("id", contact.id);
-
-      if (auto.reminder_text) {
-        await db.from("queue").insert({
-          contact_id: contact.id,
-          automation_id: contact.last_automation_id,
-          account_id: account.id,
-          kind: "reminder",
-          recipient_type: "id",
-          recipient_value: senderId,
-          needs_24h_window: true,
-          send_after: new Date(Date.now() + (auto.reminder_delay_minutes || 60) * 60000).toISOString(),
-          payload: {
-            welcome_message: auto.reminder_text,
-            // Lembrete usa seu próprio link, se configurado; senão cai no link da etapa final
-            link_label: auto.reminder_link_label || step.link_label,
-            link_url: auto.reminder_link_url || step.link_url,
-          },
-        });
-      }
+async function handleMessage(db: DB, account: any, msg: any) {
+  const sender = msg.sender?.id;
+  if (!sender || sender === account.ig_user_id || msg.message?.is_echo || !msg.message || msg.message.is_deleted || !msg.message.mid) return;
+  const eventTime = Number(msg.timestamp);
+  if (!Number.isFinite(eventTime) || eventTime <= 0 || eventTime > Date.now() + 60000) return;
+  const {data:contacts,error} = await db.rpc('record_instagram_interaction',{p_account:account.id,p_sender:sender,p_at:new Date(eventTime).toISOString()});
+  if (error) throw error;
+  const contact = contacts?.[0];
+  if (!contact) throw new Error('Contato não persistido');
+  const payload = msg.message.quick_reply?.payload;
+  if (payload) {
+    let run: any;
+    let index: number;
+    const click = String(payload).match(/^RUN_([0-9a-f-]{36})_(\d+)$/i);
+    if (click) {
+      index = Number(click[2]);
+      const result = await db.from('automation_runs').select('*').eq('id',click[1]).eq('account_id',account.id).eq('contact_id',contact.id).maybeSingle();
+      if (result.error) throw result.error;
+      run = result.data;
+    } else {
+      // Botões legados continuam apenas quando há uma etapa anterior enviada.
+      const old = String(payload).match(/^STEP_(\d+)$/);
+      if (!old || !contact.last_automation_id) return;
+      index = Number(old[1]);
+      const previous = await db.from('queue').select('id,payload,run_id').eq('account_id',account.id).eq('contact_id',contact.id).eq('automation_id',contact.last_automation_id).eq('kind','flow_step').eq('status','sent').contains('payload',{step_index:index-1}).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      if (previous.error) throw previous.error;
+      if (!previous.data) return;
+      const a = await db.from('automations').select('*').eq('id',contact.last_automation_id).eq('account_id',account.id).single();
+      if (a.error) throw a.error;
+      if (!a.data) return;
+      run = await createRun(db,account.id,contact.id,a.data,`${account.id}:legacy:${previous.data.id}`);
     }
+    if (!run || !Number.isInteger(index) || index < 1 || !run.snapshot.steps?.[index]) return;
+    const active = await db.from('automations').select('active').eq('id',run.automation_id).eq('account_id',account.id).single();
+    if (active.error) throw active.error;
+    if (!active.data?.active) return;
+    if (click) {
+      const prior = await db.from('queue').select('id').eq('run_id',run.id).eq('kind','flow_step').eq('status','sent').contains('payload',{step_index:index-1}).limit(1).maybeSingle();
+      if (prior.error) throw prior.error;
+      if (!prior.data) return;
+    }
+    const gated = run.snapshot.require_follow && run.snapshot.steps[index].type === 'link';
+    await enqueue(db, {
+      run_id:run.id,dedup_key:gated ? `${run.id}:verify:${msg.message.mid}` : `${run.id}:step:${index}`,
+      contact_id:contact.id,automation_id:run.automation_id,account_id:account.id,
+      kind:gated ? 'verify_follow' : 'flow_step',recipient_type:'id',recipient_value:sender,
+      needs_24h_window:true,payload:{step_index:index},
+    });
     return;
   }
-
-  // Story reply ou DM comum batendo com palavra-chave -> começa o fluxo direto
-  const { data: autos } = await db
-    .from("automations")
-    .select("*")
-    .eq("account_id", account.id)
-    .eq("active", true)
-    .eq(isStoryReply ? "trigger_story_reply" : "trigger_dm", true);
-
+  const {data:autos,error:autoError} = await db.from('automations').select('*').eq('account_id',account.id).eq('active',true).eq(msg.message.reply_to?.story ? 'trigger_story_reply' : 'trigger_dm',true);
+  if (autoError) throw autoError;
   for (const auto of autos || []) {
-    if (!matches(auto.keywords, auto.match_type, text)) continue;
-    const step0 = firstStep(auto.steps);
-    if (!step0) continue;
-    await db.from("contacts").update({ last_automation_id: auto.id }).eq("id", contact.id);
-    await db.from("queue").insert({
-      contact_id: contact.id,
-      automation_id: auto.id,
-      account_id: account.id,
-      kind: "flow_step",
-      recipient_type: "id",
-      recipient_value: senderId,
-      needs_24h_window: false, // conversa já está aberta
-      payload: { step_index: 0 },
-    });
+    if (!auto.steps?.length || !matches(auto.keywords,auto.match_type,msg.message.text || '')) continue;
+    await start(db,account,contact,auto,`${account.id}:message:${msg.message.mid}`);
     break;
   }
 }

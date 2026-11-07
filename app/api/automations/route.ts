@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireUser } from "@/lib/authGuard";
+import { validateFlow } from "@/lib/automation";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser(req);
@@ -12,8 +13,9 @@ export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
   let query = db.from("automations").select("*").order("created_at", { ascending: false });
   if (accountId) query = query.eq("account_id", accountId);
-  const { data } = await query;
-  return NextResponse.json({ automations: data || [] });
+  const [{ data, error }, metrics] = await Promise.all([query, db.rpc('automation_metrics',{p_account:accountId})]);
+  if (error || metrics.error) return NextResponse.json({error:'Não foi possível carregar campanhas. Confira a migração de sequências.'}, {status:503});
+  return NextResponse.json({ automations: (data || []).map(a => ({...a, metrics:metrics.data?.find((m: {automation_id:string}) => m.automation_id === a.id)})) });
 }
 
 export async function POST(req: NextRequest) {
@@ -21,6 +23,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
   const body = await req.json();
+  const validation = validateFlow(body);
+  if (validation) return NextResponse.json({ error: validation }, { status: 400 });
   if (!body.account_id) {
     return NextResponse.json({ error: "Selecione a conta do Instagram" }, { status: 400 });
   }
@@ -44,7 +48,9 @@ export async function POST(req: NextRequest) {
     .insert({
       name: body.name || "Automação",
       account_id: body.account_id,
-      active: true,
+      active: body.active !== false,
+      require_follow: body.require_follow === true,
+      followup_steps: body.followup_steps || [],
       trigger_comment: !!body.trigger_comment,
       trigger_story_reply: !!body.trigger_story_reply,
       trigger_dm: !!body.trigger_dm,

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/automation-improvements.css" />
 <script src="/auth.js"></script>
 <style>
   .layout { display: grid; grid-template-columns: 1fr; gap: 32px; }
@@ -170,6 +171,21 @@
       <button type="button" class="btn add-step-btn" id="add-step-btn">+ Adicionar mensagem</button>
     </div>
 
+    <fieldset>
+      <legend>Condição para liberar o link</legend>
+      <label class="check-row"><input type="checkbox" name="require_follow" id="require_follow" /> A pessoa precisa seguir meu perfil</label>
+      <p class="flow-help">O botão “Já segui ✅” consulta a Meta antes da entrega. Se a consulta não estiver disponível, o link fica bloqueado e a pessoa pode tentar novamente. Escreva na mensagem anterior ao link o convite para seguir seu perfil.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sequência depois do link</legend>
+      <p class="flow-help">Cada intervalo começa após o envio anterior. A janela de 24 horas começa na última interação recebida no Direct. Se ela vencer, a mensagem será bloqueada — inclusive intervalos de 1 dia ou mais.</p>
+      <div id="followups-list"></div>
+      <button type="button" class="btn" onclick="addFollowup()">+ Adicionar follow-up</button>
+    </fieldset>
+
+    <div id="flow-summary" class="flow-summary" aria-live="polite"></div>
+
     <fieldset style="margin-top:10px">
       <legend>Lembrete depois do link (opcional)</legend>
       <div class="field">
@@ -227,11 +243,39 @@ let steps = [
   { type: 'link', text: '', link_label: 'Acessar', link_url: '' },
 ];
 const variants = [];
+let followups = [];
+document.getElementById('require_follow').addEventListener('change', updatePreview);
+document.querySelectorAll('#reminder_text, #reminder_delay_minutes, #reminder_link_label, #reminder_link_url').forEach(el => el.addEventListener('input', updatePreview));
+
+function addFollowup() {
+  followups.push({text:'', delay_minutes:10, link_url:'', link_label:'Acessar'});
+  renderFollowups();
+}
+function removeFollowup(index) { followups.splice(index,1); renderFollowups(); }
+function updateFollowup(index, field, value) {
+  followups[index][field] = field === 'delay_minutes' ? Number(value) : value;
+  updatePreview();
+}
+function renderFollowups() {
+  document.getElementById('followups-list').innerHTML = followups.map((f,i) => `
+    <div class="step-card followup-card">
+      <div class="step-top"><span class="step-badge">Follow-up ${i+1}</span><button type="button" class="step-remove" aria-label="Remover follow-up ${i+1}" onclick="removeFollowup(${i})">&times;</button></div>
+      <label for="followup-text-${i}">Mensagem</label>
+      <textarea id="followup-text-${i}" rows="2" maxlength="1000" oninput="updateFollowup(${i},'text',this.value)">${escapeHtml(f.text)}</textarea>
+      <div class="step-row">
+        <div class="grow"><label for="followup-delay-${i}">Esperar (minutos)</label><input id="followup-delay-${i}" type="number" min="1" max="43200" step="1" value="${Number(f.delay_minutes)}" oninput="updateFollowup(${i},'delay_minutes',this.value)" /></div>
+        <div class="grow"><label for="followup-preset-${i}">Intervalo rápido</label><select id="followup-preset-${i}" onchange="updateFollowup(${i},'delay_minutes',this.value);renderFollowups()"><option value="">Escolher</option><option value="10">10 minutos</option><option value="120">2 horas</option><option value="1440">1 dia</option></select></div>
+      </div>
+      <label for="followup-url-${i}">Link (opcional)</label><input id="followup-url-${i}" type="url" value="${escapeHtml(f.link_url)}" placeholder="https://" oninput="updateFollowup(${i},'link_url',this.value)" />
+      <label for="followup-label-${i}">Texto do botão</label><input id="followup-label-${i}" maxlength="20" value="${escapeHtml(f.link_label)}" oninput="updateFollowup(${i},'link_label',this.value)" />
+    </div>`).join('');
+  updatePreview();
+}
 
 function escapeHtml(str) {
   const d = document.createElement('div');
   d.innerText = str || '';
-  return d.innerHTML;
+  return d.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 // ---------- construtor de etapas ----------
@@ -303,6 +347,11 @@ document.getElementById('add-step-btn').addEventListener('click', () => {
 
 // ---------- prévia ao vivo ----------
 function updatePreview() {
+  const gated = document.getElementById('require_follow').checked;
+  const reminderText = document.getElementById('reminder_text')?.value || '';
+  const reminderDelay = Number(document.getElementById('reminder_delay_minutes')?.value || 60);
+  const summary = ['Comentário / Direct', ...steps.slice(0,-1).map(() => 'Mensagem → clique'), ...(gated ? ['Verificar seguidor → Já segui ✅'] : []), 'Liberar link', ...(reminderText ? [`Esperar ${reminderDelay} min → Lembrete`] : []), ...followups.map(f => `Esperar ${f.delay_minutes} min → Enviar mensagem`)];
+  document.getElementById('flow-summary').textContent = summary.join(' → ');
   const screen = document.getElementById('phone-screen');
   const hasContent = steps.some(s => s.text && s.text.trim());
   if (!hasContent) {
@@ -313,6 +362,7 @@ function updatePreview() {
   screen.innerHTML = steps.map((s, i) => {
     if (s.type === 'link') {
       return `
+        ${gated ? '<div class="preview-tap">Verificar seguidor na Meta → liberar somente se confirmado</div>' : ''}
         <div class="link-btn">
           <div class="txt">${escapeHtml(s.text) || 'Aqui está!'}</div>
           <div class="cta">${escapeHtml(s.link_label) || 'Acessar'}</div>
@@ -320,9 +370,9 @@ function updatePreview() {
     }
     return `
       <div class="msg-bubble-in">${escapeHtml(s.text) || '...'}</div>
-      <div class="qr-row"><span class="qr-btn">${escapeHtml(s.button_label) || 'Continuar'}</span></div>
+      <div class="qr-row"><span class="qr-btn">${gated && steps[i+1]?.type === 'link' ? 'Já segui ✅' : (escapeHtml(s.button_label) || 'Continuar')}</span></div>
       <div class="preview-tap">↳ pessoa toca no botão</div>`;
-  }).join('');
+  }).join('') + (reminderText ? `<div class="preview-tap">Esperar ${reminderDelay} minutos · lembrete com janela aberta</div><div class="msg-bubble-in">${escapeHtml(reminderText)}</div>` : '') + followups.map(f => `<div class="preview-tap">Esperar ${Number(f.delay_minutes)} minutos · somente com janela aberta</div><div class="msg-bubble-in">${escapeHtml(f.text) || 'Sua próxima mensagem'}</div>${f.link_url ? `<div class="qr-row"><span class="qr-btn">${escapeHtml(f.link_label) || 'Acessar'}</span></div>` : ''}`).join('');
 }
 
 // ---------- alvo do post ----------
@@ -416,6 +466,8 @@ async function loadForEdit() {
   form.reminder_delay_minutes.value = a.reminder_delay_minutes || 60;
   form.reminder_link_label.value = a.reminder_link_label || '';
   form.reminder_link_url.value = a.reminder_link_url || '';
+  form.require_follow.checked = a.require_follow === true;
+  followups = Array.isArray(a.followup_steps) ? a.followup_steps : [];
   document.getElementById('target_media_id').value = a.target_media_id || '';
   document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
   const modeRadio = document.querySelector(`input[name="target_mode"][value="${a.target_mode || 'any'}"]`);
@@ -428,6 +480,7 @@ async function loadForEdit() {
 
   (a.public_replies || []).forEach(v => variants.push(v));
   renderVariants();
+  renderFollowups();
   renderFlow();
   markMediaSelected(a.target_media_id);
 }
@@ -441,6 +494,8 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
   data.steps = steps;
+  data.require_follow = form.require_follow.checked;
+  data.followup_steps = followups;
   data.account_id = accountId;
 
   if (!accountId) {
@@ -453,7 +508,10 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   const status = document.getElementById('status');
   status.className = '';
   status.textContent = editId ? 'Salvando...' : 'Criando...';
+  const submit = form.querySelector('[type="submit"]');
+  submit.disabled = true;
 
+  try {
   const res = await authFetch(editId ? '/api/automations/' + editId : '/api/automations', {
     method: editId ? 'PATCH' : 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -469,6 +527,10 @@ document.getElementById('form').addEventListener('submit', async (e) => {
     status.className = 'error';
     status.textContent = 'Erro: ' + (err.error || 'tente novamente');
   }
+  } catch {
+    status.className = 'error';
+    status.textContent = 'Falha na conexão. Suas alterações continuam no formulário. Confira a central antes de tentar salvar novamente.';
+  } finally { submit.disabled = false; }
 });
 
 (async () => {

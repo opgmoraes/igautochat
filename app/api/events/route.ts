@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
   let query = db
     .from("queue")
-    .select("id, kind, status, created_at, error, contacts(username, ig_scoped_id), automations(name)")
+    .select("id, kind, status, created_at, error, payload, contacts(username, ig_scoped_id), automations(name)")
     .order("created_at", { ascending: false })
     .limit(30);
   if (accountId) query = query.eq("account_id", accountId);

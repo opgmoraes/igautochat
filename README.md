@@ -1,5 +1,10 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+As melhorias de automações exigem a migração
+[`supabase/automation_sequences.sql`](supabase/automation_sequences.sql) antes do deploy.
+Veja o [guia de ativação e testes](outputs/automation-improvements/activation.md)
+e o [diagnóstico](outputs/automation-improvements/diagnosis-and-plan.md).
+
 ## Getting Started
 
 First, run the development server:
