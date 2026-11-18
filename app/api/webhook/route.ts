@@ -77,7 +77,7 @@ async function handleComment(db: DB, account: any, value: any, entryTime: number
     try { latest = (await fetchMedia(account.ig_user_id,account.access_token)).data?.[0]?.id || null; } catch { /* falha fechada */ }
   }
   for (const auto of autos || []) {
-    if (auto.target_mode === 'specific' && auto.target_media_id !== value.media?.id) continue;
+    if (auto.target_mode === 'specific' && !(auto.target_media_ids?.length ? auto.target_media_ids : [auto.target_media_id]).includes(value.media?.id)) continue;
     if (auto.target_mode === 'latest' && (!latest || latest !== value.media?.id)) continue;
     if (!matches(auto.keywords,auto.match_type,value.text || '') || !auto.steps?.length) continue;
     const {data:contact,error} = await db.from('contacts').upsert({account_id:account.id,ig_scoped_id:sender,username:value.from?.username},{onConflict:'account_id,ig_scoped_id'}).select().single();

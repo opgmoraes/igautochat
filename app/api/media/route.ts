@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const accountId = searchParams.get("account_id");
+  const afterCursor = searchParams.get("after");
   if (!accountId) {
     return NextResponse.json({ media: [], error: "Selecione uma conta do Instagram primeiro" }, { status: 400 });
   }
@@ -19,8 +20,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ media: [] });
   }
   try {
-    const res = await fetchMedia(account.ig_user_id, account.access_token);
-    return NextResponse.json({ media: res.data || [] });
+    const res = await fetchMedia(account.ig_user_id, account.access_token, afterCursor || undefined);
+    return NextResponse.json({ media: res.data || [], next_cursor: res.paging?.cursors?.after || null });
   } catch (e: any) {
     return NextResponse.json({ media: [], error: e.message });
   }

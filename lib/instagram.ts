@@ -69,11 +69,12 @@ export async function fetchProfile(token: string) {
   return res.json();
 }
 
-export async function fetchMedia(igUserId: string, token: string) {
+export async function fetchMedia(igUserId: string, token: string, afterCursor?: string) {
   const params = new URLSearchParams({
     fields: "id,media_type,media_url,thumbnail_url,caption,permalink,timestamp",
     access_token: token,
   });
+  if (afterCursor) params.set('after', afterCursor);
   const res = await fetch(`${GRAPH_BASE}/${igUserId}/media?${params}`);
   if (!res.ok) throw new Error(`Falha ao buscar posts: ${await res.text()}`);
   return res.json();

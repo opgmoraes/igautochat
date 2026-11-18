@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
   const body = await req.json();
+  if (body.target_mode === 'specific' && !((Array.isArray(body.target_media_ids) && body.target_media_ids.length) || body.target_media_id)) return NextResponse.json({error:'Selecione pelo menos um Reel/post'}, {status:400});
   const validation = validateFlow(body);
   if (validation) return NextResponse.json({ error: validation }, { status: 400 });
   if (!body.account_id) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       keywords,
       match_type: body.match_type || "contains",
       target_media_id: body.target_media_id || null,
+      target_media_ids: Array.isArray(body.target_media_ids) ? body.target_media_ids.filter((id: unknown): id is string => typeof id === 'string' && !!id.trim()) : [],
       target_mode: body.target_mode || "any",
       target_media_thumb: body.target_media_thumb || null,
       public_replies: publicReplies,

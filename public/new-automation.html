@@ -144,15 +144,17 @@
       <label>Alvo do post <span class="hint">onde a automação vai escutar</span></label>
       <fieldset style="margin-bottom:0">
         <label class="check-row"><input type="radio" name="target_mode" value="any" checked /> Qualquer post</label>
-        <label class="check-row"><input type="radio" name="target_mode" value="specific" /> Post específico (já publicado)</label>
+        <label class="check-row"><input type="radio" name="target_mode" value="specific" /> Selecionar Reels/posts publicados (vários)</label>
         <label class="check-row"><input type="radio" name="target_mode" value="latest" /> Meu próximo post <span class="hint">funciona com agendados</span></label>
       </fieldset>
+      <p id="selected-media-count" class="flow-help" aria-live="polite">Nenhum Reel/post selecionado.</p>
       <p id="latest-hint" style="display:none;font-size:12px;color:var(--text-secondary);margin:8px 0 0">
         Assim que você publicar (ou um agendado sair do forno), essa automação passa a valer pra ele automaticamente.
       </p>
       <div class="media-grid" id="media-grid" style="margin-top:12px;display:none">
         <div class="media-loading">Carregando seus posts...</div>
       </div>
+      <button type="button" class="btn" id="more-media" style="display:none" onclick="loadMedia()">Carregar mais Reels/posts</button>
       <input type="hidden" name="target_media_id" id="target_media_id" value="" />
       <input type="hidden" name="target_media_thumb" id="target_media_thumb" value="" />
     </div>
@@ -244,6 +246,8 @@ let steps = [
 ];
 const variants = [];
 let followups = [];
+let selectedMediaIds = [];
+let mediaCursor = null;
 document.getElementById('require_follow').addEventListener('change', updatePreview);
 document.querySelectorAll('#reminder_text, #reminder_delay_minutes, #reminder_link_label, #reminder_link_url').forEach(el => el.addEventListener('input', updatePreview));
 
@@ -383,8 +387,14 @@ function updateTargetModeUI() {
   document.getElementById('latest-hint').style.display = mode === 'latest' ? '' : 'none';
   if (mode !== 'specific') {
     document.getElementById('target_media_id').value = '';
+    selectedMediaIds = [];
     document.getElementById('target_media_thumb').value = '';
   }
+  updateSelectedMediaCount();
+}
+function updateSelectedMediaCount() {
+  const count = selectedMediaIds.length;
+  document.getElementById('selected-media-count').textContent = count ? `${count} Reel(s)/post(s) selecionado(s). Clique novamente para remover.` : 'Nenhum Reel/post selecionado.';
 }
 
 async function loadMedia() {
@@ -394,36 +404,41 @@ async function loadMedia() {
     return;
   }
   try {
-    const res = await authFetch('/api/media?account_id=' + accountId);
-    const { media, error } = await res.json();
+    const res = await authFetch('/api/media?account_id=' + encodeURIComponent(accountId) + (mediaCursor ? '&after=' + encodeURIComponent(mediaCursor) : ''));
+    const { media, error, next_cursor } = await res.json();
     const loading = grid.querySelector('.media-loading');
     if (loading) loading.remove();
     if (error) {
-      grid.innerHTML = `<div class="media-loading">Erro ao buscar posts: ${error}</div>`;
+      grid.insertAdjacentHTML('beforeend', `<div class="media-loading">Erro ao buscar posts: ${escapeHtml(error)}</div>`);
       return;
     }
     (media || []).forEach(m => {
       const img = m.thumbnail_url || m.media_url;
       const card = document.createElement('div');
       card.className = 'media-card';
+      card.classList.toggle('selected', selectedMediaIds.includes(m.id));
       card.dataset.id = m.id;
       card.dataset.thumb = img || '';
       card.innerHTML = img ? `<img src="${img}" alt="" /><div class="check">✓</div>` : `<div class="check">✓</div>`;
       card.addEventListener('click', () => selectMedia(card));
       grid.appendChild(card);
     });
+    mediaCursor = next_cursor || null;
+    document.getElementById('more-media').style.display = mediaCursor ? '' : 'none';
   } catch (e) {
     grid.innerHTML = '<div class="media-loading">Não foi possível carregar os posts.</div>';
   }
 }
 function selectMedia(card) {
-  document.querySelectorAll('.media-card').forEach(c => c.classList.remove('selected'));
-  card.classList.add('selected');
-  document.getElementById('target_media_id').value = card.dataset.id || '';
+  const id = card.dataset.id;
+  selectedMediaIds = selectedMediaIds.includes(id) ? selectedMediaIds.filter(x => x !== id) : [...selectedMediaIds, id];
+  card.classList.toggle('selected', selectedMediaIds.includes(id));
+  document.getElementById('target_media_id').value = selectedMediaIds[0] || '';
   document.getElementById('target_media_thumb').value = card.dataset.thumb || '';
+  updateSelectedMediaCount();
 }
 function markMediaSelected(mediaId) {
-  document.querySelectorAll('.media-card').forEach(c => c.classList.toggle('selected', mediaId && c.dataset.id === mediaId));
+  document.querySelectorAll('.media-card').forEach(c => c.classList.toggle('selected', selectedMediaIds.includes(c.dataset.id)));
 }
 
 // ---------- chips de variação ----------
@@ -469,6 +484,8 @@ async function loadForEdit() {
   form.require_follow.checked = a.require_follow === true;
   followups = Array.isArray(a.followup_steps) ? a.followup_steps : [];
   document.getElementById('target_media_id').value = a.target_media_id || '';
+  selectedMediaIds = a.target_media_ids?.length ? a.target_media_ids : (a.target_media_id ? [a.target_media_id] : []);
+  updateSelectedMediaCount();
   document.getElementById('target_media_thumb').value = a.target_media_thumb || '';
   const modeRadio = document.querySelector(`input[name="target_mode"][value="${a.target_mode || 'any'}"]`);
   if (modeRadio) modeRadio.checked = true;
@@ -494,6 +511,13 @@ document.getElementById('form').addEventListener('submit', async (e) => {
   data.trigger_dm = form.trigger_dm.checked;
   data.public_replies = variants.join('\n');
   data.steps = steps;
+  data.target_media_ids = selectedMediaIds;
+  if (data.target_mode === 'specific' && !selectedMediaIds.length) {
+    const status = document.getElementById('status');
+    status.className = 'error';
+    status.textContent = 'Selecione pelo menos um Reel/post.';
+    return;
+  }
   data.require_follow = form.require_follow.checked;
   data.followup_steps = followups;
   data.account_id = accountId;
