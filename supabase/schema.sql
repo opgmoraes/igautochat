@@ -146,6 +146,9 @@ alter table automations add column if not exists pre_link_quick_reply_label text
 alter table automations add column if not exists target_mode text not null default 'any'
   check (target_mode in ('any', 'specific', 'latest'));
 
+-- múltiplos Reels/posts por automação (o app lê este array; target_media_id fica como 1º item legado)
+alter table automations add column if not exists target_media_ids text[] not null default '{}';
+
 -- =========================================================
 -- MIGRAÇÃO: fluxo de mensagens com etapas dinâmicas (tipo ManyChat)
 -- Rode isso no SQL Editor do Supabase (uma vez só)
@@ -180,21 +183,20 @@ from config
 where ig_user_id is not null
 on conflict (ig_user_id) do nothing;
 
--- automations agora pertencem a uma conta específica
+-- zera o legado depois de migrar, senão rodar este arquivo de novo recria contas já removidas
+update config set ig_user_id = null, ig_username = null, profile_picture_url = null,
+  access_token = null, token_expires_at = null, connected_at = null
+where id = 1;
+
+-- automations agora pertencem a uma conta específica (nullable: conta removida deixa a automação órfã, sem apagar)
 alter table automations add column if not exists account_id uuid references accounts(id) on delete cascade;
-update automations set account_id = (select id from accounts order by created_at limit 1)
-where account_id is null;
 create index if not exists idx_automations_account on automations(account_id);
 
 -- contacts guardam de qual conta vieram (evita cruzar fluxo entre contas)
 alter table contacts add column if not exists account_id uuid references accounts(id) on delete cascade;
-update contacts set account_id = (select id from accounts order by created_at limit 1)
-where account_id is null;
 
 -- queue guarda a conta usada no envio (não depende só da automação, que pode ser apagada)
 alter table queue add column if not exists account_id uuid references accounts(id) on delete cascade;
-update queue set account_id = (select id from accounts order by created_at limit 1)
-where account_id is null;
 create index if not exists idx_queue_account on queue(account_id);
 
 -- =========================================================
