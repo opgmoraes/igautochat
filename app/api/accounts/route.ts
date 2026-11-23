@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ accounts: data || [] });
 }
 
-// Desconecta uma conta (remove o token). As automações dela também são
-// removidas junto (on delete cascade no schema), então avise o usuário antes.
+// Remove uma conta conectada. As automações dela NÃO são apagadas: ficam sem conta
+// e desativadas, para não perder a configuração se você reconectar a mesma conta depois.
 export async function DELETE(req: NextRequest) {
   const user = await requireUser(req);
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
@@ -25,6 +25,8 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
 
   const db = supabaseAdmin();
+  await db.from("automations").update({ account_id: null, active: false }).eq("account_id", id);
+
   const { error } = await db.from("accounts").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });
