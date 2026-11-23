@@ -177,8 +177,25 @@ function renderConnectionBox() {
             <div class="sub">Escutando comentários, stories e DMs em tempo real</div>
           </div>
         </div>
+        <button type="button" class="btn" onclick="removeAccount()">Remover conta</button>
       </div>`;
   }
+}
+
+async function removeAccount() {
+  const account = accounts.find(a => a.id === selectedAccountId);
+  if (!account) return;
+  const ok = confirm(`Remover @${account.ig_username} do painel?\n\nAs automações dela ficam desativadas (não são apagadas) e você pode reconectar a conta depois.`);
+  if (!ok) return;
+
+  const res = await authFetch('/api/accounts?id=' + encodeURIComponent(account.id), { method: 'DELETE' });
+  if (!res.ok) {
+    alert('Não foi possível remover a conta. Tente de novo.');
+    return;
+  }
+  selectedAccountId = null;
+  localStorage.removeItem('igautochat_account_id');
+  await loadAccounts();
 }
 
 async function loadStats() {
